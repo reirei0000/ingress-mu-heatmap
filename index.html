@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingress S2 Cell MU Density Map (World & L13)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
+    background: #e8eef2;
+  }
+
+  /* Top-right colormap legend (12-step compatible) */
+  .legend-box {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.94);
+    padding: 8px 14px 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    font-size: 12px;
+    color: #222;
+    user-select: none;
+  }
+  .legend-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 3px;
+    width: 420px;
+  }
+  .legend-ticks span {
+    flex: 1;
+    text-align: left;
+  }
+  .legend-bars {
+    display: flex;
+    width: 420px;
+    height: 12px;
+    border: 1px solid #444;
+  }
+  .legend-bars div {
+    flex: 1;
+    height: 100%;
+    border-right: 1px solid rgba(0,0,0,0.12);
+  }
+  .legend-bars div:last-child {
+    border-right: none;
+  }
+  .legend-caption {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #222;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Top-left control panel */
+  .ctrl-panel {
+    position: absolute;
+    top: 10px;
+    left: 55px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.94);
+    padding: 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    font-size: 13px;
+    color: #222;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-width: 390px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ctrl-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: #111;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .title-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: #2b579a;
+    color: #fff;
+    font-weight: 600;
+  }
+  .lang-btn {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border: 1px solid #2b579a;
+    border-radius: 4px;
+    background: #fff;
+    color: #2b579a;
+    cursor: pointer;
+  }
+  .lang-btn:hover {
+    background: #eef4fb;
+  }
+  .ctrl-panel select, .ctrl-panel button:not(.lang-btn) {
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .ctrl-panel button:not(.lang-btn):hover {
+    background: #f0f4f8;
+  }
+  .status-line {
+    font-size: 11px;
+    color: #555;
+  }
+
+  /* Hover tooltip */
+  #hover-tooltip {
+    position: absolute;
+    z-index: 1100;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #888;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #111;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    display: none;
+    white-space: nowrap;
+  }
+
+  /* Top 30 star pins */
+  .star-pin-icon {
+    background: none;
+    border: none;
+  }
+  .star-pin-svg {
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+  }
+  /* Bottom-left Data Citation / Attribution box */
+  .citation-box {
+    position: absolute;
+    bottom: 8px;
+    left: 10px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 5px 10px;
+    border-radius: 5px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    font-size: 11px;
+    color: #333;
+    max-width: 560px;
+    line-height: 1.35;
+  }
+  .citation-box a {
+    color: #1a5fb4;
+    text-decoration: none;
+  }
+  .citation-box a:hover {
+    text-decoration: underline;
+  }
+  .citation-box summary {
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="hover-tooltip"></div>
+
+<!-- Bottom-left Citation / Attribution (CIESIN / NASA SEDAC) -->
+<div class="citation-box">
+  <details>
+    <summary id="citation-summary">Data Source &amp; Attribution: GRUMP v1 (CIESIN / NASA SEDAC) &amp; InvestigateXM</summary>
+    <div style="margin-top:4px;">
+      <b>Population Data Citation:</b> Center for International Earth Science Information Network (CIESIN), Columbia University; International Food Policy Research Institute (IFPRI); The World Bank; and Centro Internacional de Agricultura Tropical (CIAT). 2011. <i>Global Rural-Urban Mapping Project, Version 1 (GRUMPv1): Population Count Grid</i>. Palisades, NY: NASA Socioeconomic Data and Applications Center (SEDAC). <a href="https://doi.org/10.7927/H4VT1Q1H" target="_blank" rel="noopener">https://doi.org/10.7927/H4VT1Q1H</a>.<br>
+      <b>Method &amp; Reconstruction:</b> Based on <a href="https://github.com/InvestigateXM/Ingress-MU-calculation" target="_blank" rel="noopener">InvestigateXM/Ingress-MU-calculation</a> (<a href="https://mu.investigatexm.com" target="_blank" rel="noopener">mu.investigatexm.com</a>) and Gordon Ludlow's <a href="https://gordonludlow.com/ingress/reverse-engineering-mu/" target="_blank" rel="noopener">Reverse Engineering MU</a>. Independent reconstruction; not affiliated with Niantic Spatial.
+    </div>
+  </details>
+</div>
+
+<!-- Top-left Control Panel -->
+<div class="ctrl-panel">
+  <div class="ctrl-title">
+    <span>S2 MU Density Map</span>
+    <div class="title-right">
+      <span id="level-badge" class="badge">Loading...</span>
+      <button id="btn-lang" class="lang-btn" type="button" title="Switch Language / 言語切替">日本語</button>
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <label id="lbl-jump" for="jump-select">Jump:</label>
+    <select id="jump-select"></select>
+  </div>
+  <div class="ctrl-row">
+    <label id="lbl-palette" for="palette-select">Color:</label>
+    <select id="palette-select"></select>
+  </div>
+  <div class="ctrl-row">
+    <label><input type="checkbox" id="chk-top30" checked> <span id="lbl-top30">★ Top 30 Pins in View</span></label>
+    <button id="btn-refresh-pins" type="button">Refresh Pins</button>
+  </div>
+  <div class="ctrl-row">
+    <label id="lbl-opacity" for="rng-opacity">Opacity:</label>
+    <input type="range" id="rng-opacity" min="0.1" max="0.85" step="0.05" value="0.5" style="width:95px;">
+    <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧16)</span></label>
+  </div>
+  <div id="status-text" class="status-line">Loading world data...</div>
+</div>
+
+<!-- Top-right Colormap Legend -->
+<div class="legend-box">
+  <div id="legend-ticks" class="legend-ticks"></div>
+  <div id="legend-bars" class="legend-bars"></div>
+  <div class="legend-caption">
+    <span>MU Density (per km2)</span>
+    <span id="legend-mode-label" style="color:#666;font-size:11px;">12 Steps (Detailed)</span>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// 0. Internationalization (EN default + JA toggle)
+// ============================================================================
+let currentLang = new URLSearchParams(location.search).get("lang") === "ja" ? "ja" : "en";
+
+const I18N = {
+  en: {
+    toggleBtn: "日本語",
+    jump: "Jump:",
+    color: "Color:",
+    top30: "★ Top 30 Pins in View",
+    refreshPins: "Refresh Pins",
+    opacity: "Opacity:",
+    showMu: "Show MU Labels (z≧16)",
+    loadingBadge: "Loading...",
+    loadingWorld: "Loading world data...",
+    loadError: "Failed to load data/world.json. Please open via HTTP server or GCS.",
+    badgeWorld: "World (S2 Level 6)",
+    badgeRegion: "Region (S2 Level 8)",
+    badgeDetail: "Detail (S2 Level 13)",
+    badgeDetailLabels: "Detail (S2 Level 13 + MU)",
+    badgeFetching: "Loading L13...",
+    statusL6: (n) => `World View (Level 6) | Cells in view: ${n.toLocaleString()}`,
+    statusL8: (n) => `Regional View (Level 8) | Cells in view: ${n.toLocaleString()} (Zoom in for L13 detail)`,
+    statusL13: (reg, n, load) =>
+      `Detail View (Level 13) | Regions: ${reg} | Cells in view: ${n.toLocaleString()}` +
+      (load > 0 ? ` (Loading: ${load}...)` : ""),
+    statusFetching: (load) => `Loading L13 detail data (${load} regions)...`,
+    statusFallback: (n) => `Level 8 View (L13 not available here) | Cells in view: ${n.toLocaleString()}`,
+    rankTooltip: (r, d) => `Rank #${r} (${d} MU/km2)`,
+    rankTitle: (r) => `Rank #${r} in Current View`,
+    palettes: {
+      step12_detail: "12 Steps (Detailed: 0–12,000+)",
+      step12_1000: "12 Steps (1,000 step: 0–11,000+)",
+      step6_2000: "6 Steps (2,000 step: Classic)",
+    },
+    legendLabels: {
+      step12_detail: "12 Steps (Detailed)",
+      step12_1000: "12 Steps (1,000 step)",
+      step6_2000: "6 Steps (2,000 step)",
+    },
+    jumps: [
+      {
+        group: "Japan (L13)",
+        items: [
+          ["35.72,139.68,13", "Tokyo Area (L13)"],
+          ["35.731,139.665,17", "Tokyo - Ekoda/Numabukuro (Labels z=17)"],
+          ["34.69,135.50,13", "Osaka Area (L13)"],
+          ["35.17,136.90,13", "Nagoya Area (L13)"],
+          ["33.59,130.40,13", "Fukuoka Area (L13)"],
+          ["43.06,141.35,13", "Sapporo Area (L13)"],
+          ["26.21,127.68,13", "Okinawa - Naha (L13)"],
+        ],
+      },
+      {
+        group: "World Cities (L13)",
+        items: [
+          ["40.758,-73.985,13", "New York - Manhattan (L13)"],
+          ["51.507,-0.127,13", "London (L13)"],
+          ["48.856,2.352,13", "Paris (L13)"],
+          ["48.137,11.575,13", "Munich (L13)"],
+          ["37.566,126.978,13", "Seoul (L13)"],
+          ["25.033,121.565,13", "Taipei (L13)"],
+          ["22.319,114.169,13", "Hong Kong (L13)"],
+          ["1.352,103.819,13", "Singapore (L13)"],
+          ["30.044,31.235,13", "Cairo (L13)"],
+        ],
+      },
+      {
+        group: "Overview",
+        items: [
+          ["36.5,138.0,6", "Japan Overview (L6)"],
+          ["30.0,15.0,3", "World Overview (L6)"],
+        ],
+      },
+    ],
+  },
+  ja: {
+    toggleBtn: "English",
+    jump: "ジャンプ:",
+    color: "色分け:",
+    top30: "★ 画面内の Top 30 ピン",
+    refreshPins: "現在画面でピン更新",
+    opacity: "不透明度:",
+    showMu: "拡大時にMU数値表示 (z≧16)",
+    loadingBadge: "読込中...",
+    loadingWorld: "データを読み込んでいます...",
+    loadError: "data/world.json の読み込みに失敗しました。HTTPサーバーまたはGCS経由で開いてください。",
+    badgeWorld: "World (S2 Level 6)",
+    badgeRegion: "Region (S2 Level 8)",
+    badgeDetail: "Detail (S2 Level 13)",
+    badgeDetailLabels: "Detail (S2 Level 13 + MU数値)",
+    badgeFetching: "L13 詳細データ取得中...",
+    statusL6: (n) => `広域表示 (Level 6) | 画面内セル: ${n.toLocaleString()} 個`,
+    statusL8: (n) => `中域表示 (Level 8) | 画面内セル: ${n.toLocaleString()} 個 (さらに拡大でL13詳細表示)`,
+    statusL13: (reg, n, load) =>
+      `詳細表示 (Level 13) | 読込リージョン: ${reg} | 画面内セル: ${n.toLocaleString()} 個` +
+      (load > 0 ? ` (取得中: ${load}...)` : ""),
+    statusFetching: (load) => `L13 詳細データを読み込んでいます (${load} リージョン)...`,
+    statusFallback: (n) => `Level 8 表示 (このエリアの L13 詳細ファイルは未生成) | 画面内セル: ${n.toLocaleString()} 個`,
+    rankTooltip: (r, d) => `第${r}位 (${d} MU/km2)`,
+    rankTitle: (r) => `画面エリア内 第${r}位`,
+    palettes: {
+      step12_detail: "12段階 (郊外〜都心詳細: 0〜12,000+)",
+      step12_1000: "12段階 (1,000刻み: 0〜11,000+)",
+      step6_2000: "6段階 (2,000刻み: 従来版)",
+    },
+    legendLabels: {
+      step12_detail: "12パターン (郊外〜都心詳細)",
+      step12_1000: "12パターン (1,000刻み)",
+      step6_2000: "6パターン (2,000刻み)",
+    },
+    jumps: [
+      {
+        group: "日本国内 (L13)",
+        items: [
+          ["35.72,139.68,13", "東京周辺 (L13)"],
+          ["35.731,139.665,17", "東京・江古田〜沼袋 (数値表示 z=17)"],
+          ["34.69,135.50,13", "大阪周辺 (L13)"],
+          ["35.17,136.90,13", "名古屋周辺 (L13)"],
+          ["33.59,130.40,13", "福岡周辺 (L13)"],
+          ["43.06,141.35,13", "札幌周辺 (L13)"],
+          ["26.21,127.68,13", "沖縄・那覇 (L13)"],
+        ],
+      },
+      {
+        group: "海外主要都市 (L13)",
+        items: [
+          ["40.758,-73.985,13", "ニューヨーク (Manhattan L13)"],
+          ["51.507,-0.127,13", "ロンドン (London L13)"],
+          ["48.856,2.352,13", "パリ (Paris L13)"],
+          ["48.137,11.575,13", "ミュンヘン (Munich L13)"],
+          ["37.566,126.978,13", "ソウル (Seoul L13)"],
+          ["25.033,121.565,13", "台北 (Taipei L13)"],
+          ["22.319,114.169,13", "香港 (Hong Kong L13)"],
+          ["1.352,103.819,13", "シンガポール (Singapore L13)"],
+          ["30.044,31.235,13", "カイロ (Cairo L13)"],
+        ],
+      },
+      {
+        group: "広域ビュー",
+        items: [
+          ["36.5,138.0,6", "日本全体 (広域)"],
+          ["30.0,15.0,3", "世界全体 (World)"],
+        ],
+      },
+    ],
+  },
+};
+
+function t() {
+  return I18N[currentLang];
+}
+
+// ============================================================================
+// 1. S2 Geometry Engine (Real-time 64-bit BigInt vertices, centers, tokens)
+// ============================================================================
+const POS_TO_IJ = [
+  [0, 1, 3, 2],
+  [0, 2, 3, 1],
+  [3, 2, 0, 1],
+  [3, 1, 0, 2],
+];
+const IJ_TO_POS = [
+  [0, 1, 3, 2],
+  [0, 3, 1, 2],
+  [2, 3, 1, 0],
+  [2, 1, 3, 0],
+];
+const POS_TO_ORIENTATION_XOR = [1, 0, 0, 3];
+const RAD2DEG = 180.0 / Math.PI;
+const DEG2RAD = Math.PI / 180.0;
+
+function stToUv(s) {
+  return s >= 0.5 ? (4 * s * s - 1) / 3 : (1 - 4 * (1 - s) * (1 - s)) / 3;
+}
+function uvToSt(u) {
+  return u >= 0 ? 0.5 * Math.sqrt(1 + 3 * u) : 1 - 0.5 * Math.sqrt(1 - 3 * u);
+}
+function faceUvToXyz(face, u, v) {
+  switch (face) {
+    case 0: return [1, u, v];
+    case 1: return [-u, 1, v];
+    case 2: return [-u, -v, 1];
+    case 3: return [-1, -v, -u];
+    case 4: return [v, -1, -u];
+    case 5: return [v, u, -1];
+  }
+}
+function xyzToFaceUv(x, y, z) {
+  const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+  let face = ax > ay ? (ax > az ? 0 : 2) : (ay > az ? 1 : 2);
+  if ((face === 0 && x < 0) || (face === 1 && y < 0) || (face === 2 && z < 0)) face += 3;
+  switch (face) {
+    case 0: return [face, y / x, z / x];
+    case 1: return [face, -x / y, z / y];
+    case 2: return [face, -x / z, -y / z];
+    case 3: return [face, z / x, y / x];
+    case 4: return [face, z / y, -x / y];
+    case 5: return [face, -y / z, -x / z];
+  }
+}
+function xyzToLatLng(xyz) {
+  return [
+    Math.atan2(xyz[2], Math.hypot(xyz[0], xyz[1])) * RAD2DEG,
+    Math.atan2(xyz[1], xyz[0]) * RAD2DEG,
+  ];
+}
+function encodeCellId(face, i, j) {
+  let o = face & 1, pos = 0n;
+  for (let k = 29; k >= 0; k--) {
+    const ij = (((i >> k) & 1) << 1) | ((j >> k) & 1);
+    const p = IJ_TO_POS[o][ij];
+    pos = (pos << 2n) | BigInt(p);
+    o ^= POS_TO_ORIENTATION_XOR[p];
+  }
+  return (BigInt(face) << 61n) | (pos << 1n) | 1n;
+}
+function cellParent(id, level) {
+  const m = 1n << BigInt(2 * (30 - level));
+  return (id & -m) | m;
+}
+function latLngToLevel6Index(latDeg, lngDeg) {
+  const la = latDeg * DEG2RAD, ln = lngDeg * DEG2RAD;
+  const x = Math.cos(la) * Math.cos(ln), y = Math.cos(la) * Math.sin(ln), z = Math.sin(la);
+  const [face, u, v] = xyzToFaceUv(x, y, z);
+  const i = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(u))));
+  const j = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(v))));
+  const l6 = cellParent(encodeCellId(face, i, j), 6);
+  return Number(l6 >> 49n);
+}
+function indexToCellId(globalIndex, level) {
+  return (BigInt(2 * globalIndex + 1)) << BigInt(60 - 2 * level);
+}
+function toToken(id) {
+  return id.toString(16).padStart(16, "0").replace(/0+$/, "") || "X";
+}
+
+const _geomCache = new Map();
+function getCellGeometry(id, level) {
+  let g = _geomCache.get(id);
+  if (g) return g;
+  if (_geomCache.size > 120000) _geomCache.clear();
+
+  const face = Number(id >> 61n);
+  let o = face & 1, i = 0, j = 0;
+  for (let k = 0; k < level; k++) {
+    const p = Number((id >> BigInt(59 - 2 * k)) & 3n);
+    const ij = POS_TO_IJ[o][p];
+    i = (i << 1) | (ij >> 1);
+    j = (j << 1) | (ij & 1);
+    o ^= POS_TO_ORIENTATION_XOR[p];
+  }
+  const sz = 2 ** (30 - level);
+  const i0 = i * sz, j0 = j * sz;
+
+  const u0 = stToUv(i0 / 1073741824);
+  const u1 = stToUv((i0 + sz) / 1073741824);
+  const v0 = stToUv(j0 / 1073741824);
+  const v1 = stToUv((j0 + sz) / 1073741824);
+  const uc = stToUv((i0 + sz * 0.5) / 1073741824);
+  const vc = stToUv((j0 + sz * 0.5) / 1073741824);
+
+  const verts = [
+    xyzToLatLng(faceUvToXyz(face, u0, v0)),
+    xyzToLatLng(faceUvToXyz(face, u1, v0)),
+    xyzToLatLng(faceUvToXyz(face, u1, v1)),
+    xyzToLatLng(faceUvToXyz(face, u0, v1)),
+  ];
+  const center = xyzToLatLng(faceUvToXyz(face, uc, vc));
+  g = { verts, center };
+  _geomCache.set(id, g);
+  return g;
+}
+
+// ============================================================================
+// 2. Colormap (12-step Detailed default + 12-step Linear + 6-step Classic)
+// ============================================================================
+const COLORS_12 = [
+  "#0000b8", // 1: Deep Navy
+  "#0055ff", // 2: Blue
+  "#00aaff", // 3: Sky Blue
+  "#00ffff", // 4: Cyan
+  "#00ff88", // 5: Emerald
+  "#00ee00", // 6: Green
+  "#99ff00", // 7: Lime
+  "#ffff00", // 8: Yellow
+  "#ffaa00", // 9: Orange
+  "#ff4400", // 10: Red-Orange
+  "#e60026", // 11: Red
+  "#9600c8", // 12: Purple
+];
+
+const PALETTES = {
+  step12_detail: {
+    thresholds: [0, 100, 250, 500, 1000, 2000, 3500, 5000, 6500, 8000, 10000, 12000],
+    ticks: ["0", "100", "250", "500", "1k", "2k", "3.5k", "5k", "6.5k", "8k", "10k", "12k+"],
+    colors: COLORS_12,
+  },
+  step12_1000: {
+    thresholds: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000],
+    ticks: ["0", "1k", "2k", "3k", "4k", "5k", "6k", "7k", "8k", "9k", "10k", "11k+"],
+    colors: COLORS_12,
+  },
+  step6_2000: {
+    thresholds: [0, 2000, 4000, 6000, 8000, 10000],
+    ticks: ["0", "2,000", "4,000", "6,000", "8,000", "10,000+"],
+    colors: ["#0000ff", "#00ffff", "#00ff00", "#ffff00", "#ff0000", "#9600c8"],
+  },
+};
+
+let currentPaletteKey = "step12_detail";
+
+function renderLegend() {
+  const p = PALETTES[currentPaletteKey];
+  const ticksEl = document.getElementById("legend-ticks");
+  const barsEl = document.getElementById("legend-bars");
+  document.getElementById("legend-mode-label").textContent = t().legendLabels[currentPaletteKey];
+
+  ticksEl.innerHTML = p.ticks.map(tk => `<span>${tk}</span>`).join("");
+  barsEl.innerHTML = p.colors.map((c, i) => {
+    const lo = p.thresholds[i].toLocaleString();
+    const hi = i + 1 < p.thresholds.length ? p.thresholds[i + 1].toLocaleString() : "∞";
+    return `<div style="background:${c};" title="${lo} – ${hi} MU/km²"></div>`;
+  }).join("");
+}
+
+function getColorForDensity(d) {
+  const p = PALETTES[currentPaletteKey];
+  const th = p.thresholds;
+  for (let i = th.length - 1; i >= 0; i--) {
+    if (d >= th[i]) return p.colors[i];
+  }
+  return p.colors[0];
+}
+
+// ============================================================================
+// 3. Leaflet Map Initialization (GSI Pale + OpenStreetMap)
+// ============================================================================
+const map = L.map("map", {
+  center: [35.72, 139.68],
+  zoom: 13,
+  preferCanvas: true,
+});
+
+const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}).addTo(map);
+
+const gsiPaleLayer = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+  maxZoom: 18,
+  minZoom: 5,
+  bounds: [[20.0, 122.0], [46.0, 154.0]],
+  attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">GSI Japan (Pale)</a> | GRUMP v1 (CIESIN/SEDAC)',
+}).addTo(map);
+
+L.control.layers(
+  { "GSI Pale (Japan) + OSM": gsiPaleLayer, "OpenStreetMap (Global)": osmLayer },
+  {},
+  { position: "bottomright" }
+).addTo(map);
+
+// ============================================================================
+// 4. Data Management & Canvas Overlay Layer (Level-3 Binary Shards)
+// ============================================================================
+let worldData = null;
+let l3AvailableSet = new Set();
+const l3ShardLoading = new Set();
+const l13RegionCache = new Map(); // l6_index (number) -> { l6_index, idx: Uint16Array, val: Float32Array }
+let renderedCells = [];
+let pinLayerGroup = L.layerGroup().addTo(map);
+
+const S2CanvasOverlay = L.Layer.extend({
+  onAdd: function(map) {
+    this._map = map;
+    this._canvas = L.DomUtil.create("canvas", "leaflet-layer");
+    this._canvas.style.position = "absolute";
+    this._canvas.style.pointerEvents = "none";
+    this._ctx = this._canvas.getContext("2d");
+    map.getPanes().overlayPane.appendChild(this._canvas);
+
+    map.on("moveend zoomend resize", this._resetAndDraw, this);
+    this._resetAndDraw();
+  },
+  onRemove: function(map) {
+    L.DomUtil.remove(this._canvas);
+    map.off("moveend zoomend resize", this._resetAndDraw, this);
+  },
+  _resetAndDraw: function() {
+    if (!this._map) return;
+    const size = this._map.getSize();
+    const topLeft = this._map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(this._canvas, topLeft);
+    this._canvas.width = size.x;
+    this._canvas.height = size.y;
+    this.draw();
+  },
+  draw: function() {
+    const ctx = this._ctx;
+    const size = this._map.getSize();
+    ctx.clearRect(0, 0, size.x, size.y);
+    if (!worldData) return;
+
+    const zoom = this._map.getZoom();
+    const bounds = this._map.getBounds();
+    const south = bounds.getSouth(), north = bounds.getNorth();
+    const west = bounds.getWest(), east = bounds.getEast();
+    const opacity = parseFloat(document.getElementById("rng-opacity").value) || 0.5;
+    const showLabels = document.getElementById("chk-labels").checked && zoom >= 16;
+
+    renderedCells = [];
+
+    if (zoom <= 6) {
+      document.getElementById("level-badge").textContent = t().badgeWorld;
+      this._drawCellList(worldData.l6.idx, worldData.l6.val, 6, 0, south, north, west, east, opacity, false);
+      updateStatus(t().statusL6(renderedCells.length));
+    } else if (zoom <= 10) {
+      document.getElementById("level-badge").textContent = t().badgeRegion;
+      this._drawCellList(worldData.l8.idx, worldData.l8.val, 8, 0, south, north, west, east, opacity, false);
+      updateStatus(t().statusL8(renderedCells.length));
+    } else {
+      const visibleL6Indices = getVisibleL6Indices(south, north, west, east);
+      let loadingCount = 0;
+      let drawnL13Regions = 0;
+
+      for (const l6Idx of visibleL6Indices) {
+        const cached = l13RegionCache.get(l6Idx);
+        if (cached) {
+          drawnL13Regions++;
+          const baseGlobalIdx = cached.l6_index * 16384;
+          this._drawCellList(
+            cached.idx,
+            cached.val,
+            13,
+            baseGlobalIdx,
+            south,
+            north,
+            west,
+            east,
+            opacity,
+            showLabels
+          );
+        } else {
+          const l3Idx = l6Idx >> 6;
+          if (l3AvailableSet.has(l3Idx)) {
+            if (!l3ShardLoading.has(l3Idx)) {
+              loadL3Shard(l3Idx);
+            }
+            if (l3ShardLoading.get && l3ShardLoading.has(l3Idx)) {
+              loadingCount++;
+            }
+          }
+        }
+      }
+
+      if (drawnL13Regions > 0) {
+        document.getElementById("level-badge").textContent = showLabels
+          ? t().badgeDetailLabels
+          : t().badgeDetail;
+        updateStatus(t().statusL13(drawnL13Regions, renderedCells.length, loadingCount));
+      } else {
+        document.getElementById("level-badge").textContent = loadingCount > 0
+          ? t().badgeFetching
+          : t().badgeRegion;
+        this._drawCellList(worldData.l8.idx, worldData.l8.val, 8, 0, south, north, west, east, opacity, false);
+        updateStatus(
+          loadingCount > 0
+            ? t().statusFetching(loadingCount)
+            : t().statusFallback(renderedCells.length)
+        );
+      }
+    }
+  },
+
+  _drawCellList: function(indices, values, level, baseGlobalIdx, south, north, west, east, opacity, showLabels) {
+    const ctx = this._ctx;
+    const map = this._map;
+    const margin = level === 13 ? 0.02 : level === 8 ? 0.6 : 2.5;
+    const sLim = south - margin, nLim = north + margin;
+    const wLim = west - margin, eLim = east + margin;
+
+    ctx.lineWidth = level === 13 ? 1.0 : 0.6;
+    ctx.strokeStyle = "rgba(51, 51, 51, 0.75)";
+    ctx.globalAlpha = opacity;
+
+    const labelQueue = [];
+
+    for (let i = 0; i < indices.length; i++) {
+      const globalIdx = baseGlobalIdx + indices[i];
+      const cid = indexToCellId(globalIdx, level);
+      const geom = getCellGeometry(cid, level);
+      const [clat, clng] = geom.center;
+
+      if (clat < sLim || clat > nLim || clng < wLim || clng > eLim) continue;
+
+      const verts = geom.verts;
+      if (Math.abs(verts[0][1] - verts[2][1]) > 90) continue;
+
+      const p0 = map.latLngToContainerPoint(verts[0]);
+      const p1 = map.latLngToContainerPoint(verts[1]);
+      const p2 = map.latLngToContainerPoint(verts[2]);
+      const p3 = map.latLngToContainerPoint(verts[3]);
+
+      const dens = values[i];
+      ctx.fillStyle = getColorForDensity(dens);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      const pc = map.latLngToContainerPoint(geom.center);
+      const cellInfo = {
+        cid,
+        level,
+        density: dens,
+        center: geom.center,
+        verts,
+        pts: [p0, p1, p2, p3],
+        pc,
+      };
+      renderedCells.push(cellInfo);
+
+      if (showLabels) {
+        labelQueue.push(cellInfo);
+      }
+    }
+
+    if (showLabels && labelQueue.length > 0) {
+      ctx.globalAlpha = 1.0;
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.fillStyle = "#000000";
+
+      for (let i = 0; i < labelQueue.length; i++) {
+        const c = labelQueue[i];
+        const text = Math.round(c.density).toLocaleString("en-US");
+        ctx.strokeText(text, c.pc.x, c.pc.y);
+        ctx.fillText(text, c.pc.x, c.pc.y);
+      }
+    }
+    ctx.globalAlpha = 1.0;
+  },
+});
+
+const s2Overlay = new S2CanvasOverlay();
+s2Overlay.addTo(map);
+
+const l3ShardLoaded = new Set();
+
+function getVisibleL6Indices(south, north, west, east) {
+  const indices = new Set();
+  const s = south - 0.03, n = north + 0.03;
+  const w = west - 0.03, e = east + 0.03;
+  const latSpan = Math.max(0.01, n - s);
+  const lngSpan = Math.max(0.01, e - w);
+  const steps = 6;
+  for (let i = 0; i <= steps; i++) {
+    const la = Math.max(-89.9, Math.min(89.9, s + (latSpan * i) / steps));
+    for (let j = 0; j <= steps; j++) {
+      const ln = Math.max(-179.9, Math.min(179.9, w + (lngSpan * j) / steps));
+      indices.add(latLngToLevel6Index(la, ln));
+    }
+  }
+  return indices;
+}
+
+async function fetchDecompressedBuffer(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
+    const ds = new DecompressionStream("gzip");
+    const stream = new Blob([buf]).stream().pipeThrough(ds);
+    return await new Response(stream).arrayBuffer();
+  }
+  return buf;
+}
+
+async function loadL3Shard(l3Idx) {
+  if (l3ShardLoaded.has(l3Idx) || l3ShardLoading.has(l3Idx)) return;
+  l3ShardLoading.add(l3Idx);
+  try {
+    const buf = await fetchDecompressedBuffer(`data/l13/s_${l3Idx}.bin`);
+    const dv = new DataView(buf);
+    let offset = 0;
+    const regionCount = dv.getUint16(offset, true);
+    offset += 2;
+
+    for (let r = 0; r < regionCount; r++) {
+      const l6Index = dv.getUint16(offset, true);
+      const cellCount = dv.getUint16(offset + 2, true);
+      offset += 4;
+
+      const idxArr = new Uint16Array(cellCount);
+      for (let i = 0; i < cellCount; i++) {
+        idxArr[i] = dv.getUint16(offset + i * 2, true);
+      }
+      offset += cellCount * 2;
+
+      const valArr = new Float32Array(cellCount);
+      for (let i = 0; i < cellCount; i++) {
+        valArr[i] = dv.getFloat32(offset + i * 4, true);
+      }
+      offset += cellCount * 4;
+
+      l13RegionCache.set(l6Index, {
+        l6_index: l6Index,
+        idx: idxArr,
+        val: valArr,
+      });
+    }
+
+    l3ShardLoaded.add(l3Idx);
+    l3ShardLoading.delete(l3Idx);
+    l3AvailableSet.delete(l3Idx); // Mark as already unpacked in memory
+    s2Overlay.draw();
+    if (document.getElementById("chk-top30").checked && pinLayerGroup.getLayers().length === 0) {
+      updateTop30Pins();
+    }
+  } catch (err) {
+    console.warn(`Failed to load L3 shard s_${l3Idx}.bin:`, err);
+    l3ShardLoading.delete(l3Idx);
+  }
+}
+
+// ============================================================================
+// 5. Top 30 Star Pins in Current View (Red: 1-10, Orange: 11-20, Blue: 21-30)
+// ============================================================================
+function createStarPinIcon(rank) {
+  let color = "#38aadd";
+  if (rank <= 10) color = "#d63e2a";
+  else if (rank <= 20) color = "#f69730";
+
+  const svg = `
+    <svg class="star-pin-svg" width="28" height="38" viewBox="0 0 28 38" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 1C6.8 1 1 6.8 1 14c0 9.5 13 23 13 23s13-13.5 13-23C27 6.8 21.2 1 14 1z"
+            fill="${color}" stroke="#ffffff" stroke-width="1.5"/>
+      <polygon points="14,6.5 16.1,11.2 21.2,11.7 17.3,15.1 18.5,20.1 14,17.4 9.5,20.1 10.7,15.1 6.8,11.7 11.9,11.2"
+               fill="#ffffff"/>
+    </svg>`;
+  return L.divIcon({
+    className: "star-pin-icon",
+    html: svg,
+    iconSize: [28, 38],
+    iconAnchor: [14, 37],
+    popupAnchor: [0, -34],
+    tooltipAnchor: [0, -30],
+  });
+}
+
+function updateTop30Pins() {
+  pinLayerGroup.clearLayers();
+  if (!document.getElementById("chk-top30").checked) return;
+  if (renderedCells.length === 0) return;
+
+  const bounds = map.getBounds();
+  const inView = renderedCells.filter(c => bounds.contains(c.center));
+  inView.sort((a, b) => b.density - a.density);
+  const top30 = inView.slice(0, 30);
+
+  top30.forEach((cell, idx) => {
+    const rank = idx + 1;
+    const token = toToken(cell.cid);
+    const marker = L.marker(cell.center, { icon: createStarPinIcon(rank) });
+    marker.bindTooltip(t().rankTooltip(rank, Math.round(cell.density).toLocaleString("en-US")));
+    marker.bindPopup(`
+      <div style="min-width:175px;">
+        <b>${t().rankTitle(rank)}</b><br>
+        <b>MU Density:</b> ${cell.density.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MU/km²<br>
+        <b>Token:</b> <code>${token}</code><br>
+        <b>Level:</b> ${cell.level}<br>
+        <b>Center:</b> ${cell.center[0].toFixed(6)}, ${cell.center[1].toFixed(6)}
+      </div>
+    `);
+    pinLayerGroup.addLayer(marker);
+  });
+}
+
+// ============================================================================
+// 6. Mouse Hover & Click Cell Inspection
+// ============================================================================
+function pointInQuad(px, py, pts) {
+  let inside = false;
+  for (let i = 0, j = 3; i < 4; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    const intersect = ((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function findCellAtContainerPoint(pt) {
+  for (let i = renderedCells.length - 1; i >= 0; i--) {
+    const c = renderedCells[i];
+    if (pointInQuad(pt.x, pt.y, c.pts)) return c;
+  }
+  return null;
+}
+
+const tooltipEl = document.getElementById("hover-tooltip");
+map.on("mousemove", function(e) {
+  const cell = findCellAtContainerPoint(e.containerPoint);
+  if (cell) {
+    tooltipEl.style.display = "block";
+    tooltipEl.style.left = (e.originalEvent.clientX + 14) + "px";
+    tooltipEl.style.top = (e.originalEvent.clientY + 14) + "px";
+    tooltipEl.textContent = `${Math.round(cell.density).toLocaleString("en-US")} MU/km2`;
+  } else {
+    tooltipEl.style.display = "none";
+  }
+});
+
+map.on("mouseout", function() {
+  tooltipEl.style.display = "none";
+});
+
+map.on("click", function(e) {
+  const cell = findCellAtContainerPoint(e.containerPoint);
+  if (!cell) return;
+  const token = toToken(cell.cid);
+  const r6Token = toToken(cellParent(cell.cid, 6));
+  L.popup()
+    .setLatLng(e.latlng)
+    .setContent(`
+      <div style="min-width:175px;">
+        <b>Token:</b> <code>${token}</code><br>
+        <b>MU Density:</b> ${cell.density.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MU/km²<br>
+        <b>Level:</b> ${cell.level} (L6 Region: <code>${r6Token}</code>)<br>
+        <b>Center:</b> ${cell.center[0].toFixed(6)}, ${cell.center[1].toFixed(6)}
+      </div>
+    `)
+    .openOn(map);
+});
+
+// ============================================================================
+// 7. UI Language Switching & Initialization
+// ============================================================================
+function updateStatus(msg) {
+  document.getElementById("status-text").textContent = msg;
+}
+
+function applyLanguage() {
+  const lang = t();
+  document.documentElement.lang = currentLang;
+  document.getElementById("btn-lang").textContent = lang.toggleBtn;
+  document.getElementById("lbl-jump").textContent = lang.jump;
+  document.getElementById("lbl-palette").textContent = lang.color;
+  document.getElementById("lbl-top30").textContent = lang.top30;
+  document.getElementById("btn-refresh-pins").textContent = lang.refreshPins;
+  document.getElementById("lbl-opacity").textContent = lang.opacity;
+  document.getElementById("lbl-show-mu").textContent = lang.showMu;
+
+  // Populate Jump dropdown preserving current selection
+  const jumpEl = document.getElementById("jump-select");
+  const prevJump = jumpEl.value || "35.72,139.68,13";
+  jumpEl.innerHTML = lang.jumps.map(g => {
+    const opts = g.items.map(([val, label]) => `<option value="${val}">${label}</option>`).join("");
+    return `<optgroup label="${g.group}">${opts}</optgroup>`;
+  }).join("");
+  jumpEl.value = prevJump;
+
+  // Populate Palette dropdown preserving current selection
+  const palEl = document.getElementById("palette-select");
+  palEl.innerHTML = Object.keys(PALETTES).map(key => {
+    const sel = key === currentPaletteKey ? " selected" : "";
+    return `<option value="${key}"${sel}>${lang.palettes[key]}</option>`;
+  }).join("");
+
+  renderLegend();
+  if (worldData) {
+    s2Overlay.draw();
+    updateTop30Pins();
+  } else {
+    document.getElementById("level-badge").textContent = lang.loadingBadge;
+    updateStatus(lang.loadingWorld);
+  }
+}
+
+document.getElementById("btn-lang").addEventListener("click", function() {
+  currentLang = currentLang === "en" ? "ja" : "en";
+  applyLanguage();
+});
+document.getElementById("rng-opacity").addEventListener("input", () => s2Overlay.draw());
+document.getElementById("chk-labels").addEventListener("change", () => s2Overlay.draw());
+document.getElementById("chk-top30").addEventListener("change", () => updateTop30Pins());
+document.getElementById("btn-refresh-pins").addEventListener("click", () => updateTop30Pins());
+document.getElementById("palette-select").addEventListener("change", function() {
+  currentPaletteKey = this.value;
+  renderLegend();
+  s2Overlay.draw();
+});
+document.getElementById("jump-select").addEventListener("change", function() {
+  const [lat, lng, z] = this.value.split(",").map(Number);
+  map.setView([lat, lng], z);
+  setTimeout(updateTop30Pins, 400);
+});
+
+applyLanguage();
+
+(async function init() {
+  try {
+    const res = await fetch("data/world.json");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    worldData = await res.json();
+    l3AvailableSet = new Set(worldData.l3_shards || []);
+    s2Overlay.draw();
+    setTimeout(updateTop30Pins, 500);
+  } catch (err) {
+    updateStatus(t().loadError);
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>
