@@ -876,7 +876,7 @@ class JHeap {
     while (k > 0) {
       const p = (k - 1) >> 1;
       const e = q[p];
-      if (x[0] >= e[0]) break;
+      if (x[0] <= e[0]) break;
       q[k] = e;
       k = p;
     }
@@ -894,11 +894,11 @@ class JHeap {
         let child = 2 * k + 1;
         let c = q[child];
         const r = child + 1;
-        if (r < n && c[0] > q[r][0]) {
+        if (r < n && c[0] < q[r][0]) {
           child = r;
           c = q[child];
         }
-        if (x[0] <= c[0]) break;
+        if (x[0] >= c[0]) break;
         q[k] = c;
         k = child;
       }
