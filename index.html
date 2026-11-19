@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ingress S2 Cell MU Density Map (World & L13)</title>
+<title>Ingress MU Heatmap — Global S2 Cell Density (World & L13)</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -196,6 +196,114 @@
     font-weight: 600;
     user-select: none;
   }
+
+  /* Control Field 3-Point S2 Covering Panel */
+  .field-box {
+    border-top: 1px solid #ddd;
+    padding-top: 6px;
+    margin-top: 2px;
+  }
+  .field-box summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 12px;
+    color: #2b579a;
+    user-select: none;
+  }
+  .field-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .field-input-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .field-input-row label {
+    font-size: 11px;
+    font-weight: 700;
+    width: 22px;
+    color: #444;
+  }
+  .field-input-row input {
+    flex: 1;
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .field-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .field-actions button.active-pick {
+    background: #d63e2a !important;
+    color: #fff !important;
+    border-color: #b52b1a !important;
+    font-weight: 700;
+  }
+  .field-actions button.primary-btn {
+    background: #2b579a !important;
+    color: #fff !important;
+    border-color: #1e4175 !important;
+    font-weight: 600;
+  }
+  .field-summary {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #333;
+    line-height: 1.4;
+  }
+  .s2-vertex-marker {
+    background: #111;
+    color: #fff;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .s2-cover-label {
+    display: inline-block;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.88);
+    color: #ffffff;
+    border: 1px solid #ff40b3;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  }
+  .field-mu-total {
+    font-size: 14px;
+    font-weight: 700;
+    color: #b5175c;
+    margin-bottom: 2px;
+  }
+  .exp-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
 </style>
 </head>
 <body>
@@ -241,6 +349,33 @@
     <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧16)</span></label>
   </div>
   <div id="status-text" class="status-line">Loading world data...</div>
+  <details class="field-box" open>
+    <summary><span id="lbl-field-title">Control Field S2 Cells (Max 20)</span><span id="lbl-field-exp" class="exp-badge">Experimental</span></summary>
+    <div class="field-inputs">
+      <div class="field-input-row">
+        <label for="pt-1">P1</label>
+        <input id="pt-1" type="text" placeholder="lat, lng (or paste 3 lines)">
+      </div>
+      <div class="field-input-row">
+        <label for="pt-2">P2</label>
+        <input id="pt-2" type="text" placeholder="lat, lng">
+      </div>
+      <div class="field-input-row">
+        <label for="pt-3">P3</label>
+        <input id="pt-3" type="text" placeholder="lat, lng">
+      </div>
+    </div>
+    <div class="field-actions">
+      <button id="btn-field-pick" type="button">Pick on Map</button>
+      <button id="btn-field-draw" class="primary-btn" type="button">Highlight Cells</button>
+      <button id="btn-field-clear" type="button">Clear</button>
+      <label style="font-size:11px;display:flex;align-items:center;gap:3px;">
+        <input type="checkbox" id="chk-field-labels" checked>
+        <span id="lbl-field-labels">Cell Labels</span>
+      </label>
+    </div>
+    <div id="field-summary" class="field-summary"></div>
+  </details>
 </div>
 
 <!-- Top-right Colormap Legend -->
@@ -285,6 +420,21 @@ const I18N = {
     statusFallback: (n) => `Level 8 View (L13 not available here) | Cells in view: ${n.toLocaleString()}`,
     rankTooltip: (r, d) => `Rank #${r} (${d} MU/km2)`,
     rankTitle: (r) => `Rank #${r} in Current View`,
+    fieldTitle: "Control Field S2 Cells (Max 20)",
+    fieldExp: "Experimental",
+    fieldPick: "Pick on Map",
+    fieldPickActive: "Picking... (Click 3 pts)",
+    fieldDraw: "Highlight Cells",
+    fieldClear: "Clear",
+    fieldLabels: "Cell Labels",
+    fieldPlaceholder1: "lat, lng (or paste 3 lines)",
+    fieldInvalid: "Enter 3 valid coordinates (lat, lng) that form a triangle.",
+    fieldCalculating: "Loading population shards & calculating MU...",
+    fieldResult: (mu, area, cnt, levels) =>
+      `<div class="field-mu-total">Total MU: ${mu.toLocaleString("en-US")} MU</div>` +
+      `Area: <b>${area.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b> km² | ` +
+      `Cells: <b>${cnt}</b> (${levels})`,
+    fieldPicked: (n) => `Picked ${n}/3 points on map...`,
     palettes: {
       step12_detail: "12 Steps (Detailed: 0–12,000+)",
       step12_1000: "12 Steps (1,000 step: 0–11,000+)",
@@ -356,6 +506,21 @@ const I18N = {
     statusFallback: (n) => `Level 8 表示 (このエリアの L13 詳細ファイルは未生成) | 画面内セル: ${n.toLocaleString()} 個`,
     rankTooltip: (r, d) => `第${r}位 (${d} MU/km2)`,
     rankTitle: (r) => `画面エリア内 第${r}位`,
+    fieldTitle: "CF 使用 S2 セル強調 (最大20個)",
+    fieldExp: "実験的機能",
+    fieldPick: "地図で3点選択",
+    fieldPickActive: "選択中... (地図を3回クリック)",
+    fieldDraw: "セルを強調表示",
+    fieldClear: "クリア",
+    fieldLabels: "セルラベル",
+    fieldPlaceholder1: "緯度, 経度 (3行まとめて貼付可)",
+    fieldInvalid: "三角形になる有効な3点の座標 (緯度, 経度) を入力してください。",
+    fieldCalculating: "人口データを読み込み MU を計算中...",
+    fieldResult: (mu, area, cnt, levels) =>
+      `<div class="field-mu-total">合計 MU: ${mu.toLocaleString("ja-JP")} MU</div>` +
+      `面積: <b>${area.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}</b> km² | ` +
+      `セル数: <b>${cnt}</b> (${levels})`,
+    fieldPicked: (n) => `地図で ${n}/3 点目を選択中...`,
     palettes: {
       step12_detail: "12段階 (郊外〜都心詳細: 0〜12,000+)",
       step12_1000: "12段階 (1,000刻み: 0〜11,000+)",
@@ -527,6 +692,321 @@ function getCellGeometry(id, level) {
   g = { verts, center };
   _geomCache.set(id, g);
   return g;
+}
+
+// ============================================================================
+// 1.5 S2 Region Covering Engine (2011 Java PriorityQueue, max 20 cells, L6..L13)
+// ============================================================================
+function vecNorm(v) {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+function vecDot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+function vecCross(a, b) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+function latLngToXyz(latDeg, lngDeg) {
+  const la = latDeg * DEG2RAD, ln = lngDeg * DEG2RAD;
+  const cla = Math.cos(la);
+  return [cla * Math.cos(ln), cla * Math.sin(ln), Math.sin(la)];
+}
+function getCellLevel(id) {
+  const lsb = id & -id;
+  let lvl = 30, m = 1n;
+  while (m < lsb && lvl > 0) {
+    m <<= 2n;
+    lvl--;
+  }
+  return lvl;
+}
+function cellChild(id, k) {
+  const lsb = id & -id;
+  const newLsb = lsb >> 2n;
+  return (id ^ lsb) | (BigInt(k) * (newLsb << 1n)) | newLsb;
+}
+function cellContainsId(a, b) {
+  const lsb = a & -a;
+  return (a - lsb + 1n) <= b && b <= (a + lsb - 1n);
+}
+function getCellS2Data(id, level) {
+  const face = Number(id >> 61n);
+  let o = face & 1, i = 0, j = 0;
+  for (let k = 0; k < level; k++) {
+    const p = Number((id >> BigInt(59 - 2 * k)) & 3n);
+    const ij = POS_TO_IJ[o][p];
+    i = (i << 1) | (ij >> 1);
+    j = (j << 1) | (ij & 1);
+    o ^= POS_TO_ORIENTATION_XOR[p];
+  }
+  const sz = 2 ** (30 - level);
+  const i0 = i * sz, j0 = j * sz;
+  const u0 = stToUv(i0 / 1073741824);
+  const u1 = stToUv((i0 + sz) / 1073741824);
+  const v0 = stToUv(j0 / 1073741824);
+  const v1 = stToUv((j0 + sz) / 1073741824);
+  const vertsXyz = [
+    vecNorm(faceUvToXyz(face, u0, v0)),
+    vecNorm(faceUvToXyz(face, u1, v0)),
+    vecNorm(faceUvToXyz(face, u1, v1)),
+    vecNorm(faceUvToXyz(face, u0, v1)),
+  ];
+  return { id, level, face, u0, u1, v0, v1, vertsXyz };
+}
+function getVertexNeighbors(xyz, level) {
+  const [face, u, v] = xyzToFaceUv(xyz[0], xyz[1], xyz[2]);
+  const i = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(u))));
+  const j = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(v))));
+  const sz = 1 << (30 - level);
+  const half = sz >> 1;
+  const iBase = i & ~(sz - 1);
+  const jBase = j & ~(sz - 1);
+  const di = (i & half) ? sz : -sz;
+  const dj = (j & half) ? sz : -sz;
+  const offsets = [
+    [iBase, jBase],
+    [iBase + di, jBase],
+    [iBase, jBase + dj],
+    [iBase + di, jBase + dj],
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const [ii, jj] of offsets) {
+    let cid;
+    if (ii >= 0 && ii < 1073741824 && jj >= 0 && jj < 1073741824) {
+      cid = cellParent(encodeCellId(face, ii, jj), level);
+    } else {
+      const uc = stToUv((ii + 0.5 * sz) / 1073741824);
+      const vc = stToUv((jj + 0.5 * sz) / 1073741824);
+      const p = faceUvToXyz(face, uc, vc);
+      const [nf, nu, nv] = xyzToFaceUv(p[0], p[1], p[2]);
+      const ni = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(nu))));
+      const nj = Math.max(0, Math.min(1073741823, Math.floor(1073741824 * uvToSt(nv))));
+      cid = cellParent(encodeCellId(nf, ni, nj), level);
+    }
+    if (!seen.has(cid)) {
+      seen.add(cid);
+      out.push(cid);
+    }
+  }
+  return out;
+}
+function onArc(p, u, v, n) {
+  return vecDot(p, [u[0] + v[0], u[1] + v[1], u[2] + v[2]]) > 0 &&
+         vecDot(vecCross(u, p), n) >= -1e-12 &&
+         vecDot(vecCross(p, v), n) >= -1e-12;
+}
+function arcsIntersect(a, b, c, d) {
+  const n1 = vecCross(a, b);
+  const n2 = vecCross(c, d);
+  const x = vecCross(n1, n2);
+  const len = Math.hypot(x[0], x[1], x[2]);
+  if (len < 1e-14) return false;
+  const p = [x[0] / len, x[1] / len, x[2] / len];
+  if (onArc(p, a, b, n1) && onArc(p, c, d, n2)) return true;
+  const np = [-p[0], -p[1], -p[2]];
+  return onArc(np, a, b, n1) && onArc(np, c, d, n2);
+}
+
+class TriangleRegion {
+  constructor(latLngs) {
+    this.vs = latLngs.map(([la, ln]) => latLngToXyz(la, ln));
+    const c = vecNorm([
+      this.vs[0][0] + this.vs[1][0] + this.vs[2][0],
+      this.vs[0][1] + this.vs[1][1] + this.vs[2][1],
+      this.vs[0][2] + this.vs[1][2] + this.vs[2][2],
+    ]);
+    this.center = c;
+    this.normals = [];
+    for (let i = 0; i < 3; i++) {
+      let n = vecCross(this.vs[i], this.vs[(i + 1) % 3]);
+      if (vecDot(n, c) < 0) n = [-n[0], -n[1], -n[2]];
+      this.normals.push(n);
+    }
+    this.capAngle = Math.max(
+      Math.acos(Math.max(-1, Math.min(1, vecDot(c, this.vs[0])))),
+      Math.acos(Math.max(-1, Math.min(1, vecDot(c, this.vs[1])))),
+      Math.acos(Math.max(-1, Math.min(1, vecDot(c, this.vs[2]))))
+    );
+  }
+  containsPoint(p) {
+    return vecDot(this.normals[0], p) >= -1e-14 &&
+           vecDot(this.normals[1], p) >= -1e-14 &&
+           vecDot(this.normals[2], p) >= -1e-14;
+  }
+  contains(cell) {
+    for (let k = 0; k < 4; k++) {
+      if (!this.containsPoint(cell.vertsXyz[k])) return false;
+    }
+    return true;
+  }
+  mayIntersect(cell) {
+    for (let k = 0; k < 4; k++) {
+      if (this.containsPoint(cell.vertsXyz[k])) return true;
+    }
+    for (let k = 0; k < 3; k++) {
+      const [f, u, v] = xyzToFaceUv(this.vs[k][0], this.vs[k][1], this.vs[k][2]);
+      if (f === cell.face && u >= cell.u0 && u <= cell.u1 && v >= cell.v0 && v <= cell.v1) {
+        return true;
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      const a = this.vs[i], b = this.vs[(i + 1) % 3];
+      for (let j = 0; j < 4; j++) {
+        const c = cell.vertsXyz[j], d = cell.vertsXyz[(j + 1) % 4];
+        if (arcsIntersect(a, b, c, d)) return true;
+      }
+    }
+    return false;
+  }
+}
+
+class JHeap {
+  constructor() { this.q = []; }
+  get length() { return this.q.length; }
+  push(x) {
+    const q = this.q;
+    q.push(x);
+    let k = q.length - 1;
+    while (k > 0) {
+      const p = (k - 1) >> 1;
+      const e = q[p];
+      if (x[0] >= e[0]) break;
+      q[k] = e;
+      k = p;
+    }
+    q[k] = x;
+  }
+  pop() {
+    const q = this.q;
+    const res = q[0];
+    const x = q.pop();
+    const n = q.length;
+    if (n > 0) {
+      let k = 0;
+      const half = n >> 1;
+      while (k < half) {
+        let child = 2 * k + 1;
+        let c = q[child];
+        const r = child + 1;
+        if (r < n && c[0] > q[r][0]) {
+          child = r;
+          c = q[child];
+        }
+        if (x[0] <= c[0]) break;
+        q[k] = c;
+        k = child;
+      }
+      q[k] = x;
+    }
+    return res;
+  }
+}
+
+const KMINWIDTH = (2 * Math.SQRT2) / 3;
+function maxLevelFor(value) {
+  if (value <= 0) return 30;
+  return Math.max(0, Math.min(30, Math.floor(Math.log2(KMINWIDTH / value))));
+}
+
+function normalizeCellIds(ids, minLevel = 6) {
+  const uniq = Array.from(new Set(ids)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const out = [];
+  for (const cid of uniq) {
+    let c = cid;
+    if (out.length > 0 && cellContainsId(out[out.length - 1], c)) continue;
+    while (out.length > 0 && cellContainsId(c, out[out.length - 1])) out.pop();
+    while (out.length >= 3 && getCellLevel(c) > minLevel) {
+      const lvl = getCellLevel(c);
+      const p = cellParent(c, lvl - 1);
+      const tail = out.slice(-3);
+      if (tail.every(o => getCellLevel(o) === lvl && cellParent(o, lvl - 1) === p) && new Set(tail).size === 3) {
+        out.splice(-3, 3);
+        c = p;
+      } else {
+        break;
+      }
+    }
+    out.push(c);
+  }
+  return out;
+}
+
+function coverTriangle(latLngs, maxCells = 20, maxLevel = 13, minLevel = 6) {
+  const R = new TriangleRegion(latLngs);
+  const result = [];
+  const pq = new JHeap();
+
+  function newCandidate(cid) {
+    const lvl = getCellLevel(cid);
+    const cell = getCellS2Data(cid, lvl);
+    if (!R.mayIntersect(cell)) return null;
+    let terminal = false;
+    if (lvl >= minLevel && (lvl + 1 > maxLevel || R.contains(cell))) {
+      terminal = true;
+    }
+    return { cid, lvl, cell, terminal, children: [], nterm: 0 };
+  }
+
+  function add(cand) {
+    if (!cand) return 0;
+    if (cand.terminal) {
+      result.push(cand.cid);
+      return 1;
+    }
+    let nterm = 0;
+    for (let k = 0; k < 4; k++) {
+      const ch = newCandidate(cellChild(cand.cid, k));
+      if (ch) {
+        cand.children.push(ch);
+        if (ch.terminal) nterm++;
+      }
+    }
+    cand.nterm = nterm;
+    if (cand.children.length === 0) return 0;
+    if (nterm === 4 && cand.lvl >= minLevel) {
+      cand.terminal = true;
+      return add(cand);
+    }
+    const priority = -(((cand.lvl << 2) + cand.children.length << 2) + nterm);
+    pq.push([priority, cand]);
+    return 0;
+  }
+
+  let started = false;
+  if (maxCells >= 4) {
+    const level = Math.min(maxLevelFor(2 * R.capAngle), Math.min(maxLevel, 29));
+    if (level > 0) {
+      for (const cid of getVertexNeighbors(R.center, level)) {
+        add(newCandidate(cid));
+      }
+      started = true;
+    }
+  }
+  if (!started) {
+    for (let face = 0; face < 6; face++) {
+      add(newCandidate((BigInt(face) << 61n) | (1n << 60n)));
+    }
+  }
+
+  while (pq.length > 0) {
+    const [, cand] = pq.pop();
+    const n = cand.children.length;
+    const expand = cand.lvl < minLevel || n === 1 || (result.length + pq.length + n <= maxCells);
+    if (expand) {
+      for (const ch of cand.children) add(ch);
+    } else {
+      cand.terminal = true;
+      add(cand);
+    }
+  }
+
+  return normalizeCellIds(result, minLevel);
 }
 
 // ============================================================================
@@ -841,51 +1321,60 @@ async function fetchDecompressedBuffer(url) {
   return buf;
 }
 
+const l3ShardPromises = new Map();
+
 async function loadL3Shard(l3Idx) {
-  if (l3ShardLoaded.has(l3Idx) || l3ShardLoading.has(l3Idx)) return;
+  if (l3ShardLoaded.has(l3Idx)) return;
+  if (l3ShardPromises.has(l3Idx)) return l3ShardPromises.get(l3Idx);
   l3ShardLoading.add(l3Idx);
-  try {
-    const buf = await fetchDecompressedBuffer(`data/l13/s_${l3Idx}.bin`);
-    const dv = new DataView(buf);
-    let offset = 0;
-    const regionCount = dv.getUint16(offset, true);
-    offset += 2;
+  const p = (async () => {
+    try {
+      const buf = await fetchDecompressedBuffer(`data/l13/s_${l3Idx}.bin`);
+      const dv = new DataView(buf);
+      let offset = 0;
+      const regionCount = dv.getUint16(offset, true);
+      offset += 2;
 
-    for (let r = 0; r < regionCount; r++) {
-      const l6Index = dv.getUint16(offset, true);
-      const cellCount = dv.getUint16(offset + 2, true);
-      offset += 4;
+      for (let r = 0; r < regionCount; r++) {
+        const l6Index = dv.getUint16(offset, true);
+        const cellCount = dv.getUint16(offset + 2, true);
+        offset += 4;
 
-      const idxArr = new Uint16Array(cellCount);
-      for (let i = 0; i < cellCount; i++) {
-        idxArr[i] = dv.getUint16(offset + i * 2, true);
+        const idxArr = new Uint16Array(cellCount);
+        for (let i = 0; i < cellCount; i++) {
+          idxArr[i] = dv.getUint16(offset + i * 2, true);
+        }
+        offset += cellCount * 2;
+
+        const valArr = new Float32Array(cellCount);
+        for (let i = 0; i < cellCount; i++) {
+          valArr[i] = dv.getFloat32(offset + i * 4, true);
+        }
+        offset += cellCount * 4;
+
+        l13RegionCache.set(l6Index, {
+          l6_index: l6Index,
+          idx: idxArr,
+          val: valArr,
+        });
       }
-      offset += cellCount * 2;
 
-      const valArr = new Float32Array(cellCount);
-      for (let i = 0; i < cellCount; i++) {
-        valArr[i] = dv.getFloat32(offset + i * 4, true);
+      l3ShardLoaded.add(l3Idx);
+      l3ShardLoading.delete(l3Idx);
+      l3AvailableSet.delete(l3Idx); // Mark as already unpacked in memory
+      s2Overlay.draw();
+      if (document.getElementById("chk-top30").checked && pinLayerGroup.getLayers().length === 0) {
+        updateTop30Pins();
       }
-      offset += cellCount * 4;
-
-      l13RegionCache.set(l6Index, {
-        l6_index: l6Index,
-        idx: idxArr,
-        val: valArr,
-      });
+    } catch (err) {
+      console.warn(`Failed to load L3 shard s_${l3Idx}.bin:`, err);
+      l3ShardLoading.delete(l3Idx);
+    } finally {
+      l3ShardPromises.delete(l3Idx);
     }
-
-    l3ShardLoaded.add(l3Idx);
-    l3ShardLoading.delete(l3Idx);
-    l3AvailableSet.delete(l3Idx); // Mark as already unpacked in memory
-    s2Overlay.draw();
-    if (document.getElementById("chk-top30").checked && pinLayerGroup.getLayers().length === 0) {
-      updateTop30Pins();
-    }
-  } catch (err) {
-    console.warn(`Failed to load L3 shard s_${l3Idx}.bin:`, err);
-    l3ShardLoading.delete(l3Idx);
-  }
+  })();
+  l3ShardPromises.set(l3Idx, p);
+  return p;
 }
 
 // ============================================================================
@@ -981,6 +1470,10 @@ map.on("mouseout", function() {
 });
 
 map.on("click", function(e) {
+  if (fieldPickMode) {
+    handleFieldMapPick(e.latlng);
+    return;
+  }
   const cell = findCellAtContainerPoint(e.containerPoint);
   if (!cell) return;
   const token = toToken(cell.cid);
@@ -996,6 +1489,326 @@ map.on("click", function(e) {
       </div>
     `)
     .openOn(map);
+});
+
+// ============================================================================
+// 6.5 Control Field 3-Point S2 Cell Highlighting (Max 20 cells)
+// ============================================================================
+const fieldLayerGroup = L.layerGroup().addTo(map);
+let fieldPickMode = false;
+let pickedPoints = [];
+let lastHighlightedPts = null;
+
+function parseLatLngText(str) {
+  const m = String(str || "").trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null;
+  }
+  return [lat, lng];
+}
+
+function interpolateGreatCircle(p1, p2, steps = 16) {
+  const v1 = latLngToXyz(p1[0], p1[1]);
+  const v2 = latLngToXyz(p2[0], p2[1]);
+  const pts = [];
+  for (let i = 0; i < steps; i++) {
+    const f = i / steps;
+    const v = vecNorm([
+      v1[0] * (1 - f) + v2[0] * f,
+      v1[1] * (1 - f) + v2[1] * f,
+      v1[2] * (1 - f) + v2[2] * f,
+    ]);
+    pts.push(xyzToLatLng(v));
+  }
+  return pts;
+}
+
+function setFieldPickMode(on) {
+  fieldPickMode = on;
+  const btn = document.getElementById("btn-field-pick");
+  btn.classList.toggle("active-pick", on);
+  btn.textContent = on ? t().fieldPickActive : t().fieldPick;
+  map.getContainer().style.cursor = on ? "crosshair" : "";
+  if (on) {
+    pickedPoints = [];
+    document.getElementById("field-summary").innerHTML = t().fieldPicked(1);
+  }
+}
+
+function handleFieldMapPick(latlng) {
+  const idx = pickedPoints.length + 1;
+  const str = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
+  document.getElementById(`pt-${idx}`).value = str;
+  pickedPoints.push([latlng.lat, latlng.lng]);
+
+  // Show temporary marker while picking
+  if (idx === 1) fieldLayerGroup.clearLayers();
+  const marker = L.marker([latlng.lat, latlng.lng], {
+    icon: L.divIcon({
+      className: "s2-vertex-marker",
+      html: String(idx),
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    }),
+  });
+  fieldLayerGroup.addLayer(marker);
+
+  if (pickedPoints.length >= 3) {
+    setFieldPickMode(false);
+    highlightFieldCells(false);
+  } else {
+    document.getElementById("field-summary").innerHTML = t().fieldPicked(pickedPoints.length + 1);
+  }
+}
+
+const RE_KM = 6371.01;
+
+function clipPolyByNormal(poly, n) {
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const da = vecDot(n, a);
+    const db = vecDot(n, b);
+    if (da >= 0) out.push(a);
+    if ((da >= 0) !== (db >= 0)) {
+      const t = da / (da - db);
+      out.push(vecNorm([
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+      ]));
+    }
+  }
+  return out;
+}
+
+function sphArea(poly) {
+  if (poly.length < 3) return 0;
+  let total = 0;
+  const a = poly[0];
+  for (let i = 1; i < poly.length - 1; i++) {
+    const b = poly[i], c = poly[i + 1];
+    total += 2 * Math.atan2(
+      Math.abs(vecDot(a, vecCross(b, c))),
+      1 + vecDot(a, b) + vecDot(b, c) + vecDot(c, a)
+    );
+  }
+  return total;
+}
+
+function getCellDensityFromCache(cid, lvl) {
+  const l6Idx = Number(cellParent(cid, 6) >> 49n);
+  const region = l13RegionCache.get(l6Idx);
+  if (!region) return 0;
+  const lsb = cid & -cid;
+  const cidMin13 = (cid - lsb) | (1n << 34n);
+  const subStart = Number(cidMin13 >> 35n) - l6Idx * 16384;
+  const count13 = 1 << (2 * (13 - lvl));
+  const subEnd = subStart + count13;
+  const idx = region.idx;
+  const val = region.val;
+  // Binary search for subStart
+  let lo = 0, hi = idx.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (idx[mid] < subStart) lo = mid + 1;
+    else hi = mid;
+  }
+  let sum = 0;
+  for (let k = lo; k < idx.length && idx[k] < subEnd; k++) {
+    sum += val[k];
+  }
+  return sum / count13;
+}
+
+async function highlightFieldCells(fitBounds = true) {
+  const pts = [1, 2, 3].map(i => parseLatLngText(document.getElementById(`pt-${i}`).value));
+  if (pts.some(p => !p)) {
+    document.getElementById("field-summary").textContent = t().fieldInvalid;
+    return;
+  }
+  // Check collinearity (zero area)
+  const vs = pts.map(([la, ln]) => latLngToXyz(la, ln));
+  const det = Math.abs(vecDot(vs[0], vecCross(vs[1], vs[2])));
+  if (det < 1e-13) {
+    document.getElementById("field-summary").textContent = t().fieldInvalid;
+    return;
+  }
+
+  lastHighlightedPts = pts;
+  fieldLayerGroup.clearLayers();
+
+  const cellIds = coverTriangle(pts, 20, 13, 6);
+
+  // Load any needed L3 population shards for accurate MU calculation
+  const neededShards = new Set();
+  for (const cid of cellIds) {
+    const l6Idx = Number(cellParent(cid, 6) >> 49n);
+    if (!l13RegionCache.has(l6Idx)) {
+      const l3Idx = l6Idx >> 6;
+      if (l3AvailableSet.has(l3Idx) || l3ShardPromises.has(l3Idx)) {
+        neededShards.add(l3Idx);
+      }
+    }
+  }
+  if (neededShards.size > 0) {
+    document.getElementById("field-summary").textContent = t().fieldCalculating;
+    await Promise.all(Array.from(neededShards).map(id => loadL3Shard(id)));
+  }
+
+  const tri = new TriangleRegion(pts);
+  const triAreaKm2 = sphArea(tri.vs) * RE_KM * RE_KM;
+  const levelCounts = {};
+  const regionRawMu = new Map();
+  const allBounds = L.latLngBounds(pts);
+  const showCellLabels = document.getElementById("chk-field-labels").checked;
+
+  // 1. Draw highlighted S2 covering cells (under triangle)
+  for (const cid of cellIds) {
+    const lvl = getCellLevel(cid);
+    levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
+    const geom = getCellGeometry(cid, lvl);
+    const s2Data = getCellS2Data(cid, lvl);
+    const token = toToken(cid);
+    const r6Id = cellParent(cid, 6);
+    const r6Token = toToken(r6Id);
+
+    // Clip cell polygon against triangle normals to get overlap area
+    let clipped = s2Data.vertsXyz;
+    for (const n of tri.normals) {
+      clipped = clipPolyByNormal(clipped, n);
+      if (clipped.length === 0) break;
+    }
+    const overlapKm2 = sphArea(clipped) * RE_KM * RE_KM;
+    const dens = getCellDensityFromCache(cid, lvl);
+    const cellRawMu = overlapKm2 * dens;
+    regionRawMu.set(r6Token, (regionRawMu.get(r6Token) || 0) + cellRawMu);
+
+    // White outer border for high contrast against any heatmap color
+    L.polygon(geom.verts, {
+      color: "#ffffff",
+      weight: 5,
+      opacity: 0.9,
+      fill: false,
+      interactive: false,
+    }).addTo(fieldLayerGroup);
+
+    // Vivid magenta inner border + light highlight fill
+    const poly = L.polygon(geom.verts, {
+      color: "#ff00aa",
+      weight: 2.5,
+      opacity: 1.0,
+      fillColor: "#ffe600",
+      fillOpacity: 0.14,
+    }).addTo(fieldLayerGroup);
+
+    poly.bindPopup(`
+      <div style="min-width:190px;">
+        <b>Covering S2 Cell</b><br>
+        <b>Token:</b> <code>${token}</code> (Level ${lvl})<br>
+        <b>L6 Region:</b> <code>${r6Token}</code><br>
+        <b>Overlap Area:</b> ${overlapKm2.toFixed(3)} km²<br>
+        <b>Density:</b> ${dens.toLocaleString("en-US", { maximumFractionDigits: 1 })} MU/km²<br>
+        <b>Cell MU:</b> ${cellRawMu.toLocaleString("en-US", { maximumFractionDigits: 1 })} MU
+      </div>
+    `);
+
+    if (showCellLabels) {
+      const muLabel = cellRawMu >= 10 ? Math.round(cellRawMu).toLocaleString("en-US") : cellRawMu.toFixed(1);
+      L.marker(geom.center, {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          html: `<div class="s2-cover-label">${token} (L${lvl}) · ${muLabel} MU</div>`,
+          iconSize: null,
+          iconAnchor: [0, 0],
+        }),
+      }).addTo(fieldLayerGroup);
+    }
+
+    geom.verts.forEach(v => allBounds.extend(v));
+  }
+
+  // Regional minimum (1 MU per L6 region) & half-up rounding
+  let regionalTotal = 0;
+  for (const rMu of regionRawMu.values()) {
+    regionalTotal += Math.max(1.0, rMu);
+  }
+  const totalMu = Math.max(1, Math.floor(regionalTotal + 0.5));
+
+  // 2. Draw great-circle Control Field triangle on top
+  const triRing = [
+    ...interpolateGreatCircle(pts[0], pts[1], 16),
+    ...interpolateGreatCircle(pts[1], pts[2], 16),
+    ...interpolateGreatCircle(pts[2], pts[0], 16),
+  ];
+  L.polygon(triRing, {
+    color: "#ffffff",
+    weight: 5,
+    opacity: 0.9,
+    fill: false,
+    interactive: false,
+  }).addTo(fieldLayerGroup);
+  L.polygon(triRing, {
+    color: "#00e5ff",
+    weight: 2.5,
+    opacity: 1.0,
+    fillColor: "#00e5ff",
+    fillOpacity: 0.08,
+    interactive: false,
+  }).addTo(fieldLayerGroup);
+
+  // 3. Draw vertex markers (P1, P2, P3)
+  pts.forEach((p, idx) => {
+    L.marker(p, {
+      icon: L.divIcon({
+        className: "s2-vertex-marker",
+        html: String(idx + 1),
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      }),
+    }).bindTooltip(`P${idx + 1}: ${p[0].toFixed(6)}, ${p[1].toFixed(6)}`).addTo(fieldLayerGroup);
+  });
+
+  if (fitBounds) {
+    map.fitBounds(allBounds, { padding: [50, 50] });
+  }
+
+  const lvlSummary = Object.keys(levelCounts)
+    .sort((a, b) => Number(a) - Number(b))
+    .map(lv => `L${lv}:${levelCounts[lv]}`)
+    .join(", ");
+  document.getElementById("field-summary").innerHTML = t().fieldResult(totalMu, triAreaKm2, cellIds.length, lvlSummary);
+}
+
+function clearFieldHighlight() {
+  if (fieldPickMode) setFieldPickMode(false);
+  pickedPoints = [];
+  lastHighlightedPts = null;
+  fieldLayerGroup.clearLayers();
+  [1, 2, 3].forEach(i => { document.getElementById(`pt-${i}`).value = ""; });
+  document.getElementById("field-summary").innerHTML = "";
+}
+
+document.getElementById("pt-1").addEventListener("paste", function(e) {
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (lines.length >= 3) {
+    e.preventDefault();
+    document.getElementById("pt-1").value = lines[0];
+    document.getElementById("pt-2").value = lines[1];
+    document.getElementById("pt-3").value = lines[2];
+    highlightFieldCells(true);
+  }
+});
+document.getElementById("btn-field-pick").addEventListener("click", () => setFieldPickMode(!fieldPickMode));
+document.getElementById("btn-field-draw").addEventListener("click", () => highlightFieldCells(true));
+document.getElementById("btn-field-clear").addEventListener("click", clearFieldHighlight);
+document.getElementById("chk-field-labels").addEventListener("change", () => {
+  if (lastHighlightedPts) highlightFieldCells(false);
 });
 
 // ============================================================================
@@ -1015,6 +1828,14 @@ function applyLanguage() {
   document.getElementById("btn-refresh-pins").textContent = lang.refreshPins;
   document.getElementById("lbl-opacity").textContent = lang.opacity;
   document.getElementById("lbl-show-mu").textContent = lang.showMu;
+  document.getElementById("lbl-field-title").textContent = lang.fieldTitle;
+  document.getElementById("lbl-field-exp").textContent = lang.fieldExp;
+  document.getElementById("btn-field-pick").textContent = fieldPickMode ? lang.fieldPickActive : lang.fieldPick;
+  document.getElementById("btn-field-draw").textContent = lang.fieldDraw;
+  document.getElementById("btn-field-clear").textContent = lang.fieldClear;
+  document.getElementById("lbl-field-labels").textContent = lang.fieldLabels;
+  document.getElementById("pt-1").placeholder = lang.fieldPlaceholder1;
+  if (lastHighlightedPts) highlightFieldCells(false);
 
   // Populate Jump dropdown preserving current selection
   const jumpEl = document.getElementById("jump-select");
