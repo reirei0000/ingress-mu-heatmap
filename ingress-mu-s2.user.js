@@ -777,6 +777,9 @@ function wrapper(plugin_info) {
   let pickMode = false;
   let pickedPortals = [];
   let lastPts = null;
+  let autoCalcPortalFields = true;
+  const fieldMuCache = new Map();
+  let lastPortalSummary = null; // { guid, html }
 
   function parseLatLngText(str) {
     const m = String(str || "").trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
@@ -808,23 +811,43 @@ function wrapper(plugin_info) {
   }
 
   function onPortalSelected(data) {
-    if (!pickMode || !data || !data.selectedPortalGuid) return;
-    const p = window.portals && window.portals[data.selectedPortalGuid];
-    if (!p) return;
-    const ll = p.getLatLng();
-    const coordStr = `${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`;
-    if (pickedPortals.some(pt => pt[0] === ll.lat && pt[1] === ll.lng)) return;
+    if (!data || !data.selectedPortalGuid) {
+      const box = document.getElementById("mu-s2-portal-box");
+      if (box) box.remove();
+      return;
+    }
+    if (pickMode) {
+      const p = window.portals && window.portals[data.selectedPortalGuid];
+      if (!p) return;
+      const ll = p.getLatLng();
+      const coordStr = `${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`;
+      if (pickedPortals.some(pt => pt[0] === ll.lat && pt[1] === ll.lng)) return;
 
-    pickedPortals.push([ll.lat, ll.lng]);
-    const idx = pickedPortals.length;
-    const input = document.getElementById(`mu-s2-p${idx}`);
-    if (input) input.value = coordStr;
+      pickedPortals.push([ll.lat, ll.lng]);
+      const idx = pickedPortals.length;
+      const input = document.getElementById(`mu-s2-p${idx}`);
+      if (input) input.value = coordStr;
 
-    if (idx >= 3) {
-      setPickMode(false);
-      self.calculateAndDraw(false);
+      if (idx >= 3) {
+        setPickMode(false);
+        self.calculateAndDraw(false);
+      } else {
+        setStatus(`Intel Map 上でポータルを <b>${idx + 1}/3</b> つ選択してください...`);
+      }
+      return;
+    }
+    if (autoCalcPortalFields) {
+      self.summarizePortalFields(data.selectedPortalGuid, false);
+    }
+  }
+
+  function onPortalDetailLoaded(data) {
+    if (!autoCalcPortalFields || pickMode || !data || !data.guid) return;
+    if (window.selectedPortal !== data.guid) return;
+    if (lastPortalSummary && lastPortalSummary.guid === data.guid) {
+      renderPortalBox(lastPortalSummary.html);
     } else {
-      setStatus(`Intel Map 上でポータルを <b>${idx + 1}/3</b> つ選択してください...`);
+      self.summarizePortalFields(data.guid, false);
     }
   }
 
@@ -857,67 +880,220 @@ function wrapper(plugin_info) {
     self.calculateAndDraw(false);
   };
 
-  self.calculateAndDraw = async function (fitBounds = false) {
-    if (!fieldLayerGroup) return;
-    const pts = [1, 2, 3].map(i => parseLatLngText(document.getElementById(`mu-s2-p${i}`)?.value));
-    if (pts.some(p => !p)) {
-      setStatus('<span style="color:#d63e2a;">三角形になる有効な3点の座標を入力してください。</span>');
+  async function computeFieldMu(pts) {
+    await ensureWorldIndex();
+    const cellIds = coverTriangle(pts, 20, 13, 6);
+    const neededShards = new Set();
+    for (const cid of cellIds) {
+      const l6Idx = Number(cellParent(cid, 6) >> 49n);
+      if (!l13RegionCache.has(l6Idx)) {
+        const l3Idx = l6Idx >> 6;
+        if (l3AvailableSet.has(l3Idx) || l3ShardPromises.has(l3Idx)) {
+          neededShards.add(l3Idx);
+        }
+      }
+    }
+    if (neededShards.size > 0) {
+      await Promise.all(Array.from(neededShards).map(id => loadL3Shard(id)));
+    }
+
+    const tri = new TriangleRegion(pts);
+    const triAreaKm2 = sphArea(tri.vs) * RE_KM * RE_KM;
+    const levelCounts = {};
+    const regionRawMu = new Map();
+    const cellRows = [];
+
+    for (const cid of cellIds) {
+      const lvl = getCellLevel(cid);
+      levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
+      const cell = getCellS2Data(cid, lvl);
+      const token = toToken(cid);
+      const r6Token = toToken(cellParent(cid, 6));
+
+      let clipped = cell.vertsXyz;
+      for (const n of tri.normals) {
+        clipped = clipPolyByNormal(clipped, n);
+        if (clipped.length === 0) break;
+      }
+      const overlapKm2 = sphArea(clipped) * RE_KM * RE_KM;
+      const dens = getCellDensityFromCache(cid, lvl);
+      const cellRawMu = overlapKm2 * dens;
+      regionRawMu.set(r6Token, (regionRawMu.get(r6Token) || 0) + cellRawMu);
+      cellRows.push({ cid, cell, token, lvl, overlapKm2, dens, cellRawMu });
+    }
+
+    let regionalTotal = 0;
+    for (const rMu of regionRawMu.values()) {
+      regionalTotal += Math.max(1.0, rMu);
+    }
+    const totalMu = Math.max(1, Math.floor(regionalTotal + 0.5));
+    return { totalMu, triAreaKm2, cellIds, levelCounts, cellRows };
+  }
+
+  function getFieldPoints(field) {
+    const ptsData = field && field.options && field.options.data && field.options.data.points;
+    if (Array.isArray(ptsData) && ptsData.length === 3) {
+      return ptsData.map(p => [p.latE6 / 1e6, p.lngE6 / 1e6]);
+    }
+    if (field && typeof field.getLatLngs === "function") {
+      const raw = field.getLatLngs();
+      const ring = Array.isArray(raw[0]) ? raw[0] : raw;
+      if (Array.isArray(ring) && ring.length === 3) {
+        return ring.map(ll => [ll.lat, ll.lng]);
+      }
+    }
+    return null;
+  }
+
+  function findFieldsForPortal(portal) {
+    if (!portal || !window.fields) return [];
+    const ll = portal.getLatLng();
+    const pLatE6 = Math.round(ll.lat * 1e6);
+    const pLngE6 = Math.round(ll.lng * 1e6);
+    const matched = [];
+    for (const guid of Object.keys(window.fields)) {
+      const f = window.fields[guid];
+      const pts = getFieldPoints(f);
+      if (!pts) continue;
+      const hit = pts.some(([la, ln]) =>
+        Math.abs(Math.round(la * 1e6) - pLatE6) <= 2 &&
+        Math.abs(Math.round(ln * 1e6) - pLngE6) <= 2
+      );
+      if (hit) matched.push({ guid, pts });
+    }
+    return matched;
+  }
+
+  function renderPortalBox(innerHtml) {
+    const pd = document.getElementById("portaldetails");
+    if (!pd || !pd.parentNode) return;
+    let box = document.getElementById("mu-s2-portal-box");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "mu-s2-portal-box";
+      box.style.cssText = "margin:6px 4px;padding:6px 8px;border:1px solid #20a8d8;border-radius:4px;background:rgba(15,23,42,0.9);color:#eee;font-size:12px;line-height:1.45;";
+      pd.parentNode.insertBefore(box, pd.nextSibling);
+    }
+    box.innerHTML = innerHtml;
+    box.querySelectorAll("[data-mu-s2-field-pts]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pts = JSON.parse(btn.getAttribute("data-mu-s2-field-pts"));
+        self.drawFieldPoints(pts, false);
+      });
+    });
+  }
+
+  self.drawFieldPoints = async function (pts, fitBounds = false) {
+    pts.forEach((pt, idx) => {
+      const el = document.getElementById(`mu-s2-p${idx + 1}`);
+      if (el) el.value = `${pt[0].toFixed(6)}, ${pt[1].toFixed(6)}`;
+    });
+    lastPts = pts;
+    await self._renderPts(pts, fitBounds);
+  };
+
+  self.summarizePortalFields = async function (guid, updateDialog = true) {
+    const targetGuid = guid || window.selectedPortal;
+    if (!targetGuid || !window.portals || !window.portals[targetGuid]) {
+      if (updateDialog) setStatus('<span style="color:#d63e2a;">ポータルが選択されていません。</span>');
       return;
     }
-    const vs = pts.map(([la, ln]) => latLngToXyz(la, ln));
-    if (Math.abs(vecDot(vs[0], vecCross(vs[1], vs[2]))) < 1e-13) {
-      setStatus('<span style="color:#d63e2a;">3点が一直線上にあり三角形になりません。</span>');
+    const portal = window.portals[targetGuid];
+    const fields = findFieldsForPortal(portal);
+    if (fields.length === 0) {
+      const msg = '<div style="color:#ccc;">表示範囲内にこのポータルを使った CF はありません。</div>';
+      lastPortalSummary = { guid: targetGuid, html: msg };
+      renderPortalBox(msg);
+      if (updateDialog) setStatus(msg);
       return;
     }
 
-    lastPts = pts;
-    fieldLayerGroup.clearLayers();
+    const loadingHtml = `<div>CF <b>${fields.length}</b> 枚の MU を計算中...</div>`;
+    renderPortalBox(loadingHtml);
+    if (updateDialog) setStatus(loadingHtml);
 
     try {
-      setStatus("S2 セルと人口データを読み込み中...");
       await ensureWorldIndex();
-
-      const cellIds = coverTriangle(pts, 20, 13, 6);
-      const neededShards = new Set();
-      for (const cid of cellIds) {
-        const l6Idx = Number(cellParent(cid, 6) >> 49n);
-        if (!l13RegionCache.has(l6Idx)) {
-          const l3Idx = l6Idx >> 6;
-          if (l3AvailableSet.has(l3Idx) || l3ShardPromises.has(l3Idx)) {
-            neededShards.add(l3Idx);
+      const shardSet = new Set();
+      for (const f of fields) {
+        if (fieldMuCache.has(f.guid)) continue;
+        const cids = coverTriangle(f.pts, 20, 13, 6);
+        for (const cid of cids) {
+          const l6Idx = Number(cellParent(cid, 6) >> 49n);
+          if (!l13RegionCache.has(l6Idx)) {
+            const l3Idx = l6Idx >> 6;
+            if (l3AvailableSet.has(l3Idx) || l3ShardPromises.has(l3Idx)) {
+              shardSet.add(l3Idx);
+            }
           }
         }
       }
-      if (neededShards.size > 0) {
-        await Promise.all(Array.from(neededShards).map(id => loadL3Shard(id)));
+      if (shardSet.size > 0) {
+        await Promise.all(Array.from(shardSet).map(id => loadL3Shard(id)));
       }
 
-      const tri = new TriangleRegion(pts);
-      const triAreaKm2 = sphArea(tri.vs) * RE_KM * RE_KM;
-      const levelCounts = {};
-      const regionRawMu = new Map();
-      const cellRows = [];
+      const results = [];
+      let sumMu = 0;
+      let sumArea = 0;
+      for (const f of fields) {
+        let res = fieldMuCache.get(f.guid);
+        if (!res) {
+          res = await computeFieldMu(f.pts);
+          if (fieldMuCache.size > 500) fieldMuCache.clear();
+          fieldMuCache.set(f.guid, res);
+        }
+        sumMu += res.totalMu;
+        sumArea += res.triAreaKm2;
+        results.push({ guid: f.guid, pts: f.pts, totalMu: res.totalMu, area: res.triAreaKm2, cells: res.cellIds.length });
+      }
+
+      results.sort((a, b) => b.totalMu - a.totalMu);
+      const rowsHtml = results.map((r, i) => {
+        const ptsAttr = JSON.stringify(r.pts).replace(/"/g, "&quot;");
+        return `<tr><td>#${i + 1}</td><td style="text-align:right;"><b>${r.totalMu.toLocaleString("ja-JP")}</b> MU</td><td style="text-align:right;">${r.area.toFixed(1)} km²</td><td style="text-align:right;"><button type="button" data-mu-s2-field-pts="${ptsAttr}" style="font-size:10px;padding:1px 4px;cursor:pointer;">S2表示</button></td></tr>`;
+      }).join("");
+
+      const html =
+        `<div style="font-weight:700;color:#ff40b3;font-size:14px;">ポータル CF 合計: ${sumMu.toLocaleString("ja-JP")} MU</div>` +
+        `<div style="font-size:11px;color:#ddd;">CF数: <b>${results.length}</b> 枚 | 合計面積: <b>${sumArea.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}</b> km²</div>` +
+        `<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;">CF 別内訳 (${results.length}枚)</summary>` +
+        `<div style="max-height:140px;overflow:auto;margin-top:3px;"><table class="mu-s2-table"><tbody>${rowsHtml}</tbody></table></div></details>`;
+
+      lastPortalSummary = { guid: targetGuid, html };
+      if (window.selectedPortal === targetGuid) {
+        renderPortalBox(html);
+      }
+      if (updateDialog) {
+        setStatus(html);
+        const box = document.getElementById("mu-s2-summary");
+        if (box) {
+          box.querySelectorAll("[data-mu-s2-field-pts]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const pts = JSON.parse(btn.getAttribute("data-mu-s2-field-pts"));
+              self.drawFieldPoints(pts, false);
+            });
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[IITC MU S2 Calc] Portal fields error:", err);
+      const errHtml = `<span style="color:#d63e2a;">CF集計エラー: ${err.message}</span>`;
+      renderPortalBox(errHtml);
+      if (updateDialog) setStatus(errHtml);
+    }
+  };
+
+  self._renderPts = async function (pts, fitBounds = false) {
+    if (!fieldLayerGroup) return;
+    fieldLayerGroup.clearLayers();
+    try {
+      setStatus("S2 セルと人口データを読み込み中...");
+      const { totalMu, triAreaKm2, cellIds, levelCounts, cellRows } = await computeFieldMu(pts);
       const allBounds = L.latLngBounds(pts);
       const showLabels = document.getElementById("mu-s2-labels")?.checked !== false;
 
-      for (const cid of cellIds) {
-        const lvl = getCellLevel(cid);
-        levelCounts[lvl] = (levelCounts[lvl] || 0) + 1;
-        const cell = getCellS2Data(cid, lvl);
-        const token = toToken(cid);
-        const r6Token = toToken(cellParent(cid, 6));
-
-        let clipped = cell.vertsXyz;
-        for (const n of tri.normals) {
-          clipped = clipPolyByNormal(clipped, n);
-          if (clipped.length === 0) break;
-        }
-        const overlapKm2 = sphArea(clipped) * RE_KM * RE_KM;
-        const dens = getCellDensityFromCache(cid, lvl);
-        const cellRawMu = overlapKm2 * dens;
-        regionRawMu.set(r6Token, (regionRawMu.get(r6Token) || 0) + cellRawMu);
-        cellRows.push({ token, lvl, overlapKm2, dens, cellRawMu });
-
+      for (const row of cellRows) {
+        const { cell, token, lvl, overlapKm2, dens, cellRawMu } = row;
         L.polygon(cell.vertsLatLng, {
           color: "#ffffff",
           weight: 5,
@@ -950,12 +1126,6 @@ function wrapper(plugin_info) {
 
         cell.vertsLatLng.forEach(v => allBounds.extend(v));
       }
-
-      let regionalTotal = 0;
-      for (const rMu of regionRawMu.values()) {
-        regionalTotal += Math.max(1.0, rMu);
-      }
-      const totalMu = Math.max(1, Math.floor(regionalTotal + 0.5));
 
       const triRing = [
         ...interpolateGreatCircle(pts[0], pts[1], 16),
@@ -1003,6 +1173,23 @@ function wrapper(plugin_info) {
     }
   };
 
+  self.calculateAndDraw = async function (fitBounds = false) {
+    if (!fieldLayerGroup) return;
+    const pts = [1, 2, 3].map(i => parseLatLngText(document.getElementById(`mu-s2-p${i}`)?.value));
+    if (pts.some(p => !p)) {
+      setStatus('<span style="color:#d63e2a;">三角形になる有効な3点の座標を入力してください。</span>');
+      return;
+    }
+    const vs = pts.map(([la, ln]) => latLngToXyz(la, ln));
+    if (Math.abs(vecDot(vs[0], vecCross(vs[1], vs[2]))) < 1e-13) {
+      setStatus('<span style="color:#d63e2a;">3点が一直線上にあり三角形になりません。</span>');
+      return;
+    }
+
+    lastPts = pts;
+    await self._renderPts(pts, fitBounds);
+  };
+
   self.clearOverlay = function () {
     if (pickMode) setPickMode(false);
     pickedPortals = [];
@@ -1031,11 +1218,13 @@ function wrapper(plugin_info) {
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
           <button id="mu-s2-pick" type="button">ポータル3点選択</button>
           <button id="mu-s2-drawtools" type="button">DrawToolsから読込</button>
+          <button id="mu-s2-portal-all" type="button">選択ポータル全CF集計</button>
           <button id="mu-s2-calc" type="button" style="font-weight:700;">計算 &amp; 強調</button>
           <button id="mu-s2-clear" type="button">クリア</button>
         </div>
-        <div style="margin-top:6px;">
+        <div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;">
           <label><input id="mu-s2-labels" type="checkbox" checked> セルラベルを表示</label>
+          <label><input id="mu-s2-auto-portal" type="checkbox"${autoCalcPortalFields ? " checked" : ""}> タップ時に全CF自動集計</label>
         </div>
         <div style="margin-top:8px;padding-top:6px;border-top:1px solid #444;">
           <div style="font-weight:700;margin-bottom:4px;">ヒートマップ表示 (MU Density Heatmap)</div>
@@ -1078,10 +1267,14 @@ function wrapper(plugin_info) {
     });
     document.getElementById("mu-s2-pick").addEventListener("click", () => setPickMode(!pickMode));
     document.getElementById("mu-s2-drawtools").addEventListener("click", () => self.loadFromDrawTools());
+    document.getElementById("mu-s2-portal-all").addEventListener("click", () => self.summarizePortalFields(null, true));
     document.getElementById("mu-s2-calc").addEventListener("click", () => self.calculateAndDraw(true));
     document.getElementById("mu-s2-clear").addEventListener("click", () => self.clearOverlay());
     document.getElementById("mu-s2-labels").addEventListener("change", () => {
       if (lastPts) self.calculateAndDraw(false);
+    });
+    document.getElementById("mu-s2-auto-portal").addEventListener("change", function () {
+      autoCalcPortalFields = this.checked;
     });
 
     const hmToggle = document.getElementById("mu-s2-hm-toggle");
@@ -1158,6 +1351,7 @@ function wrapper(plugin_info) {
     window.addLayerGroup("MU S2 Cells (Experimental)", fieldLayerGroup, true);
     window.addLayerGroup("MU Density Heatmap", heatmapLayer, false);
     window.addHook("portalSelected", onPortalSelected);
+    window.addHook("portalDetailLoaded", onPortalDetailLoaded);
 
     const toolbox = document.getElementById("toolbox");
     if (toolbox) {
