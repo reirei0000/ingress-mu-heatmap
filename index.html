@@ -97,6 +97,14 @@
     gap: 7px;
     max-width: min(370px, calc(100vw - 66px));
   }
+  .ctrl-panel.collapsed .ctrl-body {
+    display: none;
+  }
+  .ctrl-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
   .ctrl-row {
     display: flex;
     align-items: center;
@@ -362,8 +370,10 @@
     <div class="title-right">
       <span id="level-badge" class="badge">Loading</span>
       <button id="btn-lang" class="lang-btn" type="button" title="Switch Language / 言語切替">JA</button>
+      <button id="btn-panel-toggle" class="lang-btn" type="button" title="Toggle panel">▾</button>
     </div>
   </div>
+  <div id="ctrl-body" class="ctrl-body">
   <div class="ctrl-row">
     <label id="lbl-jump" for="jump-select">Jump:</label>
     <select id="jump-select"></select>
@@ -406,6 +416,7 @@
     </div>
     <div id="field-summary" class="field-summary"></div>
   </details>
+  </div>
 </div>
 
 <!-- Top-right Colormap Legend -->
@@ -1044,18 +1055,18 @@ function coverTriangle(latLngs, maxCells = 20, maxLevel = 13, minLevel = 6) {
 // 2. Colormap (12-step Detailed default + 12-step Linear + 6-step Classic)
 // ============================================================================
 const COLORS_12 = [
-  "#0000b8", // 1: Deep Navy
-  "#0055ff", // 2: Blue
-  "#00aaff", // 3: Sky Blue
-  "#00ffff", // 4: Cyan
-  "#00ff88", // 5: Emerald
-  "#00ee00", // 6: Green
-  "#99ff00", // 7: Lime
-  "#ffff00", // 8: Yellow
-  "#ffaa00", // 9: Orange
-  "#ff4400", // 10: Red-Orange
-  "#e60026", // 11: Red
-  "#9600c8", // 12: Purple
+  "#ffffcc", // 1: 0–100 (Very Pale Yellow)
+  "#ffeda0", // 2: 100–250 (Light Cream-Yellow)
+  "#fed976", // 3: 250–500 (Warm Yellow)
+  "#feb24c", // 4: 500–1k (Amber)
+  "#fd8d3c", // 5: 1k–2k (Light Orange)
+  "#fc4e2a", // 6: 2k–3.5k (Orange-Red)
+  "#e31a1c", // 7: 3.5k–5k (Red)
+  "#bd0026", // 8: 5k–6.5k (Crimson)
+  "#800026", // 9: 6.5k–8k (Dark Red)
+  "#5c004b", // 10: 8k–10k (Deep Magenta)
+  "#3a0057", // 11: 10k–12k (Dark Purple)
+  "#1e003d", // 12: 12k+ (Deepest Indigo)
 ];
 
 const PALETTES = {
@@ -1925,6 +1936,19 @@ function centerOnCurrentLocation(isInitial = false) {
 }
 
 document.getElementById("btn-my-loc").addEventListener("click", () => centerOnCurrentLocation(false));
+
+const ctrlPanelEl = document.querySelector(".ctrl-panel");
+const panelToggleBtn = document.getElementById("btn-panel-toggle");
+function setPanelCollapsed(collapsed) {
+  ctrlPanelEl.classList.toggle("collapsed", collapsed);
+  panelToggleBtn.textContent = collapsed ? "▸" : "▾";
+}
+panelToggleBtn.addEventListener("click", () => {
+  setPanelCollapsed(!ctrlPanelEl.classList.contains("collapsed"));
+});
+if (window.innerWidth <= 640) {
+  setPanelCollapsed(true);
+}
 
 applyLanguage();
 centerOnCurrentLocation(true);
