@@ -124,7 +124,7 @@
     }
     .legend-box {
       top: auto;
-      bottom: 72px;
+      bottom: 118px;
       right: 10px;
       padding: 6px 10px;
     }
@@ -133,6 +133,28 @@
       font-size: 10px;
       padding: 4px 8px;
     }
+  }
+  .my-loc-btn {
+    position: absolute;
+    bottom: 70px;
+    right: 10px;
+    z-index: 1000;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.25);
+    cursor: pointer;
+    color: #333;
+  }
+  .my-loc-btn:hover {
+    background: #f4f4f4;
+    color: #1a73e8;
   }
   .ctrl-title {
     font-weight: 700;
@@ -377,7 +399,6 @@
   <div class="ctrl-row">
     <label id="lbl-jump" for="jump-select">Jump:</label>
     <select id="jump-select"></select>
-    <button id="btn-my-loc" type="button" title="Center on my location">📍</button>
   </div>
   <div class="ctrl-row">
     <label><input type="checkbox" id="chk-top30" checked> <span id="lbl-top30">★ Top 30 Pins in View</span></label>
@@ -429,6 +450,18 @@
     <span id="legend-mode-label" style="color:#666;font-size:11px;">12 Steps (Detailed)</span>
   </div>
 </details>
+
+<!-- Bottom-right My Location Button (Google Maps style) -->
+<button id="btn-my-loc" class="my-loc-btn" type="button" title="Center on my location" aria-label="Center on my location">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="12" r="7.5"/>
+    <line x1="12" y1="2" x2="12" y2="4.5"/>
+    <line x1="12" y1="19.5" x2="12" y2="22"/>
+    <line x1="2" y1="12" x2="4.5" y2="12"/>
+    <line x1="19.5" y1="12" x2="22" y2="12"/>
+  </svg>
+</button>
 
 <script>
 // ============================================================================
