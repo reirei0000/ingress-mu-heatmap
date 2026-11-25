@@ -347,7 +347,7 @@
   <div class="ctrl-row">
     <label id="lbl-opacity" for="rng-opacity">Opacity:</label>
     <input type="range" id="rng-opacity" min="0.1" max="0.85" step="0.05" value="0.5" style="width:95px;">
-    <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧16)</span></label>
+    <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧15)</span></label>
   </div>
   <div id="status-text" class="status-line">Loading world data...</div>
   <details class="field-box" open>
@@ -403,7 +403,7 @@ const I18N = {
     top30: "★ Top 30 Pins in View",
     refreshPins: "Refresh Pins",
     opacity: "Opacity:",
-    showMu: "Show MU Labels (z≧16)",
+    showMu: "Show MU Labels (z≧15)",
     loadingBadge: "Loading...",
     loadingWorld: "Loading world data...",
     loadError: "Failed to load data/world.json. Please open via HTTP server or GCS.",
@@ -489,7 +489,7 @@ const I18N = {
     top30: "★ 画面内の Top 30 ピン",
     refreshPins: "現在画面でピン更新",
     opacity: "不透明度:",
-    showMu: "拡大時にMU数値表示 (z≧16)",
+    showMu: "拡大時にMU数値表示 (z≧15)",
     loadingBadge: "読込中...",
     loadingWorld: "データを読み込んでいます...",
     loadError: "data/world.json の読み込みに失敗しました。HTTPサーバーまたはGCS経由で開いてください。",
@@ -1144,7 +1144,7 @@ const S2CanvasOverlay = L.Layer.extend({
     const south = bounds.getSouth(), north = bounds.getNorth();
     const west = bounds.getWest(), east = bounds.getEast();
     const opacity = parseFloat(document.getElementById("rng-opacity").value) || 0.5;
-    const showLabels = document.getElementById("chk-labels").checked && zoom >= 16;
+    const showLabels = document.getElementById("chk-labels").checked && zoom >= 15;
 
     renderedCells = [];
 

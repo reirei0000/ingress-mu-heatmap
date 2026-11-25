@@ -679,7 +679,7 @@ function wrapper(plugin_info) {
         const bounds = this._map.getBounds();
         const south = bounds.getSouth(), north = bounds.getNorth();
         const west = bounds.getWest(), east = bounds.getEast();
-        const showLabels = heatmapShowLabels && zoom >= 16;
+        const showLabels = heatmapShowLabels && zoom >= 15;
 
         if (zoom <= 6) {
           this._drawCellList(worldData.l6.idx, worldData.l6.val, 6, 0, south, north, west, east, false);
@@ -1238,7 +1238,7 @@ function wrapper(plugin_info) {
               <option value="step12_1000"${heatmapPaletteKey === "step12_1000" ? " selected" : ""}>12段階 (1,000刻み)</option>
               <option value="step6_2000"${heatmapPaletteKey === "step6_2000" ? " selected" : ""}>6段階 (2,000刻み)</option>
             </select>
-            <label><input id="mu-s2-hm-labels" type="checkbox"${heatmapShowLabels ? " checked" : ""}> 拡大時数値(z≧16)</label>
+            <label><input id="mu-s2-hm-labels" type="checkbox"${heatmapShowLabels ? " checked" : ""}> 拡大時数値(z≧15)</label>
           </div>
         </div>
         <div id="mu-s2-summary" style="margin-top:8px;line-height:1.45;"></div>
