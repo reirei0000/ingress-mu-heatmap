@@ -334,6 +334,7 @@
   <div class="ctrl-row">
     <label id="lbl-jump" for="jump-select">Jump:</label>
     <select id="jump-select"></select>
+    <button id="btn-my-loc" type="button" title="Center on my location">📍</button>
   </div>
   <div class="ctrl-row">
     <label id="lbl-palette" for="palette-select">Color:</label>
@@ -1834,6 +1835,7 @@ function applyLanguage() {
   document.getElementById("btn-field-draw").textContent = lang.fieldDraw;
   document.getElementById("btn-field-clear").textContent = lang.fieldClear;
   document.getElementById("lbl-field-labels").textContent = lang.fieldLabels;
+  document.getElementById("btn-my-loc").title = currentLang === "ja" ? "現在地へ移動" : "Center on my location";
   document.getElementById("pt-1").placeholder = lang.fieldPlaceholder1;
   if (lastHighlightedPts) highlightFieldCells(false);
 
@@ -1882,7 +1884,31 @@ document.getElementById("jump-select").addEventListener("change", function() {
   setTimeout(updateTop30Pins, 400);
 });
 
+let userMovedMap = false;
+map.once("dragstart zoomstart", () => { userMovedMap = true; });
+
+function centerOnCurrentLocation(isInitial = false) {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      if (isInitial && userMovedMap) return;
+      const { latitude, longitude } = pos.coords;
+      map.setView([latitude, longitude], isInitial ? 13 : Math.max(map.getZoom(), 13));
+      setTimeout(updateTop30Pins, 400);
+    },
+    err => {
+      if (!isInitial) {
+        console.warn("Geolocation failed:", err);
+      }
+    },
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+document.getElementById("btn-my-loc").addEventListener("click", () => centerOnCurrentLocation(false));
+
 applyLanguage();
+centerOnCurrentLocation(true);
 
 (async function init() {
   try {
