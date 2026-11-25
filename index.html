@@ -35,6 +35,16 @@
     color: #222;
     user-select: none;
   }
+  .legend-box summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 12px;
+    color: #222;
+    list-style-position: inside;
+  }
+  .legend-box[open] summary {
+    margin-bottom: 6px;
+  }
   .legend-ticks {
     display: flex;
     justify-content: space-between;
@@ -42,7 +52,7 @@
     font-weight: 600;
     color: #222;
     margin-bottom: 3px;
-    width: 420px;
+    width: min(420px, calc(100vw - 48px));
   }
   .legend-ticks span {
     flex: 1;
@@ -50,7 +60,7 @@
   }
   .legend-bars {
     display: flex;
-    width: 420px;
+    width: min(420px, calc(100vw - 48px));
     height: 12px;
     border: 1px solid #444;
   }
@@ -85,13 +95,36 @@
     display: flex;
     flex-direction: column;
     gap: 7px;
-    max-width: 390px;
+    max-width: min(370px, calc(100vw - 66px));
   }
   .ctrl-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
+  }
+  #jump-select {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+  @media (max-width: 640px) {
+    .ctrl-panel {
+      padding: 8px 10px;
+      gap: 5px;
+      font-size: 12px;
+    }
+    .legend-box {
+      top: auto;
+      bottom: 72px;
+      right: 10px;
+      padding: 6px 10px;
+    }
+    .citation-box {
+      max-width: calc(100vw - 80px);
+      font-size: 10px;
+      padding: 4px 8px;
+    }
   }
   .ctrl-title {
     font-weight: 700;
@@ -314,7 +347,7 @@
 <!-- Bottom-left Citation / Attribution (CIESIN / NASA SEDAC) -->
 <div class="citation-box">
   <details>
-    <summary id="citation-summary">Data Source &amp; Attribution: GRUMP v1 (CIESIN / NASA SEDAC) &amp; InvestigateXM</summary>
+    <summary id="citation-summary">Data / Attribution</summary>
     <div style="margin-top:4px;">
       <b>Population Data Citation:</b> Center for International Earth Science Information Network (CIESIN), Columbia University; International Food Policy Research Institute (IFPRI); The World Bank; and Centro Internacional de Agricultura Tropical (CIAT). 2011. <i>Global Rural-Urban Mapping Project, Version 1 (GRUMPv1): Population Count Grid</i>. Palisades, NY: NASA Socioeconomic Data and Applications Center (SEDAC). <a href="https://doi.org/10.7927/H4VT1Q1H" target="_blank" rel="noopener">https://doi.org/10.7927/H4VT1Q1H</a>.<br>
       <b>Method &amp; Reconstruction:</b> Based on <a href="https://github.com/InvestigateXM/Ingress-MU-calculation" target="_blank" rel="noopener">InvestigateXM/Ingress-MU-calculation</a> (<a href="https://mu.investigatexm.com" target="_blank" rel="noopener">mu.investigatexm.com</a>) and Gordon Ludlow's <a href="https://gordonludlow.com/ingress/reverse-engineering-mu/" target="_blank" rel="noopener">Reverse Engineering MU</a>. Independent reconstruction; not affiliated with Niantic Spatial.
@@ -325,20 +358,16 @@
 <!-- Top-left Control Panel -->
 <div class="ctrl-panel">
   <div class="ctrl-title">
-    <span>S2 MU Density Map</span>
+    <span>S2 MU Map</span>
     <div class="title-right">
-      <span id="level-badge" class="badge">Loading...</span>
-      <button id="btn-lang" class="lang-btn" type="button" title="Switch Language / 言語切替">日本語</button>
+      <span id="level-badge" class="badge">Loading</span>
+      <button id="btn-lang" class="lang-btn" type="button" title="Switch Language / 言語切替">JA</button>
     </div>
   </div>
   <div class="ctrl-row">
     <label id="lbl-jump" for="jump-select">Jump:</label>
     <select id="jump-select"></select>
     <button id="btn-my-loc" type="button" title="Center on my location">📍</button>
-  </div>
-  <div class="ctrl-row">
-    <label id="lbl-palette" for="palette-select">Color:</label>
-    <select id="palette-select"></select>
   </div>
   <div class="ctrl-row">
     <label><input type="checkbox" id="chk-top30" checked> <span id="lbl-top30">★ Top 30 Pins in View</span></label>
@@ -350,7 +379,7 @@
     <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧15)</span></label>
   </div>
   <div id="status-text" class="status-line">Loading world data...</div>
-  <details class="field-box" open>
+  <details class="field-box">
     <summary><span id="lbl-field-title">Control Field S2 Cells (Max 20)</span><span id="lbl-field-exp" class="exp-badge">Experimental</span></summary>
     <div class="field-inputs">
       <div class="field-input-row">
@@ -380,14 +409,15 @@
 </div>
 
 <!-- Top-right Colormap Legend -->
-<div class="legend-box">
+<details class="legend-box">
+  <summary id="lbl-legend-summary">MU Density Legend</summary>
   <div id="legend-ticks" class="legend-ticks"></div>
   <div id="legend-bars" class="legend-bars"></div>
   <div class="legend-caption">
     <span>MU Density (per km2)</span>
     <span id="legend-mode-label" style="color:#666;font-size:11px;">12 Steps (Detailed)</span>
   </div>
-</div>
+</details>
 
 <script>
 // ============================================================================
@@ -397,32 +427,32 @@ let currentLang = new URLSearchParams(location.search).get("lang") === "ja" ? "j
 
 const I18N = {
   en: {
-    toggleBtn: "日本語",
+    toggleBtn: "JA",
     jump: "Jump:",
     color: "Color:",
-    top30: "★ Top 30 Pins in View",
-    refreshPins: "Refresh Pins",
-    opacity: "Opacity:",
-    showMu: "Show MU Labels (z≧15)",
-    loadingBadge: "Loading...",
-    loadingWorld: "Loading world data...",
-    loadError: "Failed to load data/world.json. Please open via HTTP server or GCS.",
-    badgeWorld: "World (S2 Level 6)",
-    badgeRegion: "Region (S2 Level 8)",
-    badgeDetail: "Detail (S2 Level 13)",
-    badgeDetailLabels: "Detail (S2 Level 13 + MU)",
-    badgeFetching: "Loading L13...",
-    statusL6: (n) => `World View (Level 6) | Cells in view: ${n.toLocaleString()}`,
-    statusL8: (n) => `Regional View (Level 8) | Cells in view: ${n.toLocaleString()} (Zoom in for L13 detail)`,
+    top30: "★ Top 30",
+    refreshPins: "Refresh",
+    opacity: "Alpha:",
+    showMu: "Labels (z≧15)",
+    loadingBadge: "Loading",
+    loadingWorld: "Loading...",
+    loadError: "Failed to load data/world.json.",
+    badgeWorld: "L6",
+    badgeRegion: "L8",
+    badgeDetail: "L13",
+    badgeDetailLabels: "L13+MU",
+    badgeFetching: "Loading L13",
+    statusL6: (n) => `L6 | Cells: ${n.toLocaleString()}`,
+    statusL8: (n) => `L8 | Cells: ${n.toLocaleString()}`,
     statusL13: (reg, n, load) =>
-      `Detail View (Level 13) | Regions: ${reg} | Cells in view: ${n.toLocaleString()}` +
-      (load > 0 ? ` (Loading: ${load}...)` : ""),
-    statusFetching: (load) => `Loading L13 detail data (${load} regions)...`,
-    statusFallback: (n) => `Level 8 View (L13 not available here) | Cells in view: ${n.toLocaleString()}`,
+      `L13 | Reg: ${reg} | Cells: ${n.toLocaleString()}` +
+      (load > 0 ? ` (+${load})` : ""),
+    statusFetching: (load) => `Loading L13 (${load})...`,
+    statusFallback: (n) => `L8 | Cells: ${n.toLocaleString()}`,
     rankTooltip: (r, d) => `Rank #${r} (${d} MU/km2)`,
     rankTitle: (r) => `Rank #${r} in Current View`,
-    fieldTitle: "Control Field S2 Cells (Max 20)",
-    fieldExp: "Experimental",
+    fieldTitle: "CF S2 Cells (≦20)",
+    fieldExp: "Exp",
     fieldPick: "Pick on Map",
     fieldPickActive: "Picking... (Click 3 pts)",
     fieldDraw: "Highlight Cells",
@@ -483,32 +513,32 @@ const I18N = {
     ],
   },
   ja: {
-    toggleBtn: "English",
-    jump: "ジャンプ:",
-    color: "色分け:",
-    top30: "★ 画面内の Top 30 ピン",
-    refreshPins: "現在画面でピン更新",
-    opacity: "不透明度:",
-    showMu: "拡大時にMU数値表示 (z≧15)",
-    loadingBadge: "読込中...",
-    loadingWorld: "データを読み込んでいます...",
-    loadError: "data/world.json の読み込みに失敗しました。HTTPサーバーまたはGCS経由で開いてください。",
-    badgeWorld: "World (S2 Level 6)",
-    badgeRegion: "Region (S2 Level 8)",
-    badgeDetail: "Detail (S2 Level 13)",
-    badgeDetailLabels: "Detail (S2 Level 13 + MU数値)",
-    badgeFetching: "L13 詳細データ取得中...",
-    statusL6: (n) => `広域表示 (Level 6) | 画面内セル: ${n.toLocaleString()} 個`,
-    statusL8: (n) => `中域表示 (Level 8) | 画面内セル: ${n.toLocaleString()} 個 (さらに拡大でL13詳細表示)`,
+    toggleBtn: "EN",
+    jump: "移動:",
+    color: "色:",
+    top30: "★ 上位30",
+    refreshPins: "更新",
+    opacity: "透過:",
+    showMu: "数値 (z≧15)",
+    loadingBadge: "読込中",
+    loadingWorld: "読込中...",
+    loadError: "data/world.json の読込に失敗しました。",
+    badgeWorld: "L6",
+    badgeRegion: "L8",
+    badgeDetail: "L13",
+    badgeDetailLabels: "L13+MU",
+    badgeFetching: "L13読込",
+    statusL6: (n) => `L6 | セル: ${n.toLocaleString()}`,
+    statusL8: (n) => `L8 | セル: ${n.toLocaleString()}`,
     statusL13: (reg, n, load) =>
-      `詳細表示 (Level 13) | 読込リージョン: ${reg} | 画面内セル: ${n.toLocaleString()} 個` +
-      (load > 0 ? ` (取得中: ${load}...)` : ""),
-    statusFetching: (load) => `L13 詳細データを読み込んでいます (${load} リージョン)...`,
-    statusFallback: (n) => `Level 8 表示 (このエリアの L13 詳細ファイルは未生成) | 画面内セル: ${n.toLocaleString()} 個`,
+      `L13 | 領域:${reg} | セル:${n.toLocaleString()}` +
+      (load > 0 ? ` (+${load})` : ""),
+    statusFetching: (load) => `L13 読込中 (${load})...`,
+    statusFallback: (n) => `L8 | セル: ${n.toLocaleString()}`,
     rankTooltip: (r, d) => `第${r}位 (${d} MU/km2)`,
     rankTitle: (r) => `画面エリア内 第${r}位`,
-    fieldTitle: "CF 使用 S2 セル強調 (最大20個)",
-    fieldExp: "実験的機能",
+    fieldTitle: "CF セル (≦20)",
+    fieldExp: "実験",
     fieldPick: "地図で3点選択",
     fieldPickActive: "選択中... (地図を3回クリック)",
     fieldDraw: "セルを強調表示",
@@ -1824,7 +1854,8 @@ function applyLanguage() {
   document.documentElement.lang = currentLang;
   document.getElementById("btn-lang").textContent = lang.toggleBtn;
   document.getElementById("lbl-jump").textContent = lang.jump;
-  document.getElementById("lbl-palette").textContent = lang.color;
+  document.getElementById("lbl-legend-summary").textContent = currentLang === "ja" ? "凡例" : "Legend";
+  document.getElementById("citation-summary").textContent = currentLang === "ja" ? "出典・クレジット" : "Data / Attribution";
   document.getElementById("lbl-top30").textContent = lang.top30;
   document.getElementById("btn-refresh-pins").textContent = lang.refreshPins;
   document.getElementById("lbl-opacity").textContent = lang.opacity;
@@ -1848,13 +1879,6 @@ function applyLanguage() {
   }).join("");
   jumpEl.value = prevJump;
 
-  // Populate Palette dropdown preserving current selection
-  const palEl = document.getElementById("palette-select");
-  palEl.innerHTML = Object.keys(PALETTES).map(key => {
-    const sel = key === currentPaletteKey ? " selected" : "";
-    return `<option value="${key}"${sel}>${lang.palettes[key]}</option>`;
-  }).join("");
-
   renderLegend();
   if (worldData) {
     s2Overlay.draw();
@@ -1873,11 +1897,6 @@ document.getElementById("rng-opacity").addEventListener("input", () => s2Overlay
 document.getElementById("chk-labels").addEventListener("change", () => s2Overlay.draw());
 document.getElementById("chk-top30").addEventListener("change", () => updateTop30Pins());
 document.getElementById("btn-refresh-pins").addEventListener("click", () => updateTop30Pins());
-document.getElementById("palette-select").addEventListener("change", function() {
-  currentPaletteKey = this.value;
-  renderLegend();
-  s2Overlay.draw();
-});
 document.getElementById("jump-select").addEventListener("change", function() {
   const [lat, lng, z] = this.value.split(",").map(Number);
   map.setView([lat, lng], z);
