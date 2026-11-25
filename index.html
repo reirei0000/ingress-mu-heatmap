@@ -407,7 +407,7 @@
   <div class="ctrl-row">
     <label id="lbl-opacity" for="rng-opacity">Opacity:</label>
     <input type="range" id="rng-opacity" min="0.1" max="0.85" step="0.05" value="0.5" style="width:95px;">
-    <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧15)</span></label>
+    <label><input type="checkbox" id="chk-labels" checked> <span id="lbl-show-mu">Show MU Labels (z≧14)</span></label>
   </div>
   <div id="status-text" class="status-line">Loading world data...</div>
   <details class="field-box">
@@ -477,7 +477,7 @@ const I18N = {
     top30: "★ Top 30",
     refreshPins: "Refresh",
     opacity: "Alpha:",
-    showMu: "Labels (z≧15)",
+    showMu: "Labels (z≧14)",
     loadingBadge: "Loading",
     loadingWorld: "Loading...",
     loadError: "Failed to load data/world.json.",
@@ -522,18 +522,6 @@ const I18N = {
     },
     jumps: [
       {
-        group: "Japan (L13)",
-        items: [
-          ["35.72,139.68,13", "Tokyo Area (L13)"],
-          ["35.731,139.665,17", "Tokyo - Ekoda/Numabukuro (Labels z=17)"],
-          ["34.69,135.50,13", "Osaka Area (L13)"],
-          ["35.17,136.90,13", "Nagoya Area (L13)"],
-          ["33.59,130.40,13", "Fukuoka Area (L13)"],
-          ["43.06,141.35,13", "Sapporo Area (L13)"],
-          ["26.21,127.68,13", "Okinawa - Naha (L13)"],
-        ],
-      },
-      {
         group: "World Cities (L13)",
         items: [
           ["40.758,-73.985,13", "New York - Manhattan (L13)"],
@@ -548,10 +536,22 @@ const I18N = {
         ],
       },
       {
+        group: "Japan (L13)",
+        items: [
+          ["35.72,139.68,13", "Tokyo Area (L13)"],
+          ["35.731,139.665,17", "Tokyo - Ekoda/Numabukuro (Labels z=17)"],
+          ["34.69,135.50,13", "Osaka Area (L13)"],
+          ["35.17,136.90,13", "Nagoya Area (L13)"],
+          ["33.59,130.40,13", "Fukuoka Area (L13)"],
+          ["43.06,141.35,13", "Sapporo Area (L13)"],
+          ["26.21,127.68,13", "Okinawa - Naha (L13)"],
+        ],
+      },
+      {
         group: "Overview",
         items: [
-          ["36.5,138.0,6", "Japan Overview (L6)"],
           ["30.0,15.0,3", "World Overview (L6)"],
+          ["36.5,138.0,6", "Japan Overview (L6)"],
         ],
       },
     ],
@@ -563,7 +563,7 @@ const I18N = {
     top30: "★ 上位30",
     refreshPins: "更新",
     opacity: "透過:",
-    showMu: "数値 (z≧15)",
+    showMu: "数値 (z≧14)",
     loadingBadge: "読込中",
     loadingWorld: "読込中...",
     loadError: "data/world.json の読込に失敗しました。",
@@ -608,18 +608,6 @@ const I18N = {
     },
     jumps: [
       {
-        group: "日本国内 (L13)",
-        items: [
-          ["35.72,139.68,13", "東京周辺 (L13)"],
-          ["35.731,139.665,17", "東京・江古田〜沼袋 (数値表示 z=17)"],
-          ["34.69,135.50,13", "大阪周辺 (L13)"],
-          ["35.17,136.90,13", "名古屋周辺 (L13)"],
-          ["33.59,130.40,13", "福岡周辺 (L13)"],
-          ["43.06,141.35,13", "札幌周辺 (L13)"],
-          ["26.21,127.68,13", "沖縄・那覇 (L13)"],
-        ],
-      },
-      {
         group: "海外主要都市 (L13)",
         items: [
           ["40.758,-73.985,13", "ニューヨーク (Manhattan L13)"],
@@ -634,10 +622,22 @@ const I18N = {
         ],
       },
       {
+        group: "日本国内 (L13)",
+        items: [
+          ["35.72,139.68,13", "東京周辺 (L13)"],
+          ["35.731,139.665,17", "東京・江古田〜沼袋 (数値表示 z=17)"],
+          ["34.69,135.50,13", "大阪周辺 (L13)"],
+          ["35.17,136.90,13", "名古屋周辺 (L13)"],
+          ["33.59,130.40,13", "福岡周辺 (L13)"],
+          ["43.06,141.35,13", "札幌周辺 (L13)"],
+          ["26.21,127.68,13", "沖縄・那覇 (L13)"],
+        ],
+      },
+      {
         group: "広域ビュー",
         items: [
-          ["36.5,138.0,6", "日本全体 (広域)"],
           ["30.0,15.0,3", "世界全体 (World)"],
+          ["36.5,138.0,6", "日本全体 (広域)"],
         ],
       },
     ],
@@ -1218,7 +1218,7 @@ const S2CanvasOverlay = L.Layer.extend({
     const south = bounds.getSouth(), north = bounds.getNorth();
     const west = bounds.getWest(), east = bounds.getEast();
     const opacity = parseFloat(document.getElementById("rng-opacity").value) || 0.5;
-    const showLabels = document.getElementById("chk-labels").checked && zoom >= 15;
+    const showLabels = document.getElementById("chk-labels").checked && zoom >= 14;
 
     renderedCells = [];
 
@@ -1916,7 +1916,7 @@ function applyLanguage() {
 
   // Populate Jump dropdown preserving current selection
   const jumpEl = document.getElementById("jump-select");
-  const prevJump = jumpEl.value || "35.72,139.68,13";
+  const prevJump = jumpEl.value || lang.jumps[0].items[0][0];
   jumpEl.innerHTML = lang.jumps.map(g => {
     const opts = g.items.map(([val, label]) => `<option value="${val}">${label}</option>`).join("");
     return `<optgroup label="${g.group}">${opts}</optgroup>`;
