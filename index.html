@@ -391,6 +391,7 @@
     <span>S2 MU Map</span>
     <div class="title-right">
       <span id="level-badge" class="badge">Loading</span>
+      <button id="btn-share" class="lang-btn" type="button" title="Copy share URL">🔗</button>
       <button id="btn-lang" class="lang-btn" type="button" title="Switch Language / 言語切替">JA</button>
       <button id="btn-panel-toggle" class="lang-btn" type="button" title="Toggle panel">▾</button>
     </div>
@@ -1146,11 +1147,26 @@ function getColorForDensity(d) {
 }
 
 // ============================================================================
-// 3. Leaflet Map Initialization (GSI Pale + OpenStreetMap)
+// 3. Leaflet Map Initialization (GSI Pale + OpenStreetMap) & URL State
 // ============================================================================
+const urlParams = new URLSearchParams(location.search);
+function parseUrlCoord(raw) {
+  if (!raw) return null;
+  const m = String(raw).trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const la = parseFloat(m[1]), ln = parseFloat(m[2]);
+  if (!Number.isFinite(la) || !Number.isFinite(ln) || la < -90 || la > 90 || ln < -180 || ln > 180) return null;
+  return [la, ln];
+}
+const initialCenter = parseUrlCoord(urlParams.get("ll"));
+const rawZoom = parseInt(urlParams.get("z"), 10);
+const initialZoom = (Number.isFinite(rawZoom) && rawZoom >= 1 && rawZoom <= 19) ? rawZoom : 13;
+const initialFieldPts = ["p1", "p2", "p3"].map(k => parseUrlCoord(urlParams.get(k)));
+const hasInitialUrlTarget = !!(initialCenter || initialFieldPts.every(Boolean));
+
 const map = L.map("map", {
-  center: [35.72, 139.68],
-  zoom: 13,
+  center: initialCenter || [35.72, 139.68],
+  zoom: initialZoom,
   preferCanvas: true,
 });
 
@@ -1857,6 +1873,7 @@ async function highlightFieldCells(fitBounds = true) {
     .map(lv => `L${lv}:${levelCounts[lv]}`)
     .join(", ");
   document.getElementById("field-summary").innerHTML = t().fieldResult(totalMu, triAreaKm2, cellIds.length, lvlSummary);
+  syncUrlParams();
 }
 
 function clearFieldHighlight() {
@@ -1866,6 +1883,7 @@ function clearFieldHighlight() {
   fieldLayerGroup.clearLayers();
   [1, 2, 3].forEach(i => { document.getElementById(`pt-${i}`).value = ""; });
   document.getElementById("field-summary").innerHTML = "";
+  syncUrlParams();
 }
 
 document.getElementById("pt-1").addEventListener("paste", function(e) {
@@ -1911,6 +1929,7 @@ function applyLanguage() {
   document.getElementById("btn-field-clear").textContent = lang.fieldClear;
   document.getElementById("lbl-field-labels").textContent = lang.fieldLabels;
   document.getElementById("btn-my-loc").title = currentLang === "ja" ? "現在地へ移動" : "Center on my location";
+  document.getElementById("btn-share").title = currentLang === "ja" ? "共有URLをコピー" : "Copy share URL";
   document.getElementById("pt-1").placeholder = lang.fieldPlaceholder1;
   if (lastHighlightedPts) highlightFieldCells(false);
 
@@ -1933,9 +1952,38 @@ function applyLanguage() {
   }
 }
 
+function syncUrlParams() {
+  const params = new URLSearchParams();
+  if (currentLang === "ja") params.set("lang", "ja");
+  const c = map.getCenter();
+  params.set("ll", `${c.lat.toFixed(6)},${c.lng.toFixed(6)}`);
+  params.set("z", String(map.getZoom()));
+  if (lastHighlightedPts && lastHighlightedPts.length === 3) {
+    lastHighlightedPts.forEach((p, idx) => {
+      params.set(`p${idx + 1}`, `${p[0].toFixed(6)},${p[1].toFixed(6)}`);
+    });
+  }
+  history.replaceState(null, "", `${location.pathname}?${params.toString()}${location.hash}`);
+}
+
+map.on("moveend zoomend", syncUrlParams);
+
+document.getElementById("btn-share").addEventListener("click", async function() {
+  syncUrlParams();
+  try {
+    await navigator.clipboard.writeText(location.href);
+    const prev = this.textContent;
+    this.textContent = "✓";
+    setTimeout(() => { this.textContent = prev; }, 1200);
+  } catch (e) {
+    prompt(currentLang === "ja" ? "共有URL:" : "Share URL:", location.href);
+  }
+});
+
 document.getElementById("btn-lang").addEventListener("click", function() {
   currentLang = currentLang === "en" ? "ja" : "en";
   applyLanguage();
+  syncUrlParams();
 });
 document.getElementById("rng-opacity").addEventListener("input", () => s2Overlay.draw());
 document.getElementById("chk-labels").addEventListener("change", () => s2Overlay.draw());
@@ -1984,7 +2032,9 @@ if (window.innerWidth <= 640) {
 }
 
 applyLanguage();
-centerOnCurrentLocation(true);
+if (!hasInitialUrlTarget) {
+  centerOnCurrentLocation(true);
+}
 
 (async function init() {
   try {
@@ -1994,6 +2044,15 @@ centerOnCurrentLocation(true);
     l3AvailableSet = new Set(worldData.l3_shards || []);
     s2Overlay.draw();
     setTimeout(updateTop30Pins, 500);
+    if (initialFieldPts.every(Boolean)) {
+      initialFieldPts.forEach((p, i) => {
+        document.getElementById(`pt-${i + 1}`).value = `${p[0].toFixed(6)}, ${p[1].toFixed(6)}`;
+      });
+      const fb = document.querySelector(".field-box");
+      if (fb) fb.open = true;
+      await highlightFieldCells(!initialCenter);
+    }
+    syncUrlParams();
   } catch (err) {
     updateStatus(t().loadError);
     console.error(err);
